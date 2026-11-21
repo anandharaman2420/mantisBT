@@ -37,10 +37,14 @@ public class CustomFieldService {
     }
 
     public static CustomFieldView view(CustomField f) {
+        return view(f, List.of());
+    }
+
+    public static CustomFieldView view(CustomField f, List<Long> projectIds) {
         return new CustomFieldView(f.getId(), f.getName(), f.getType(), f.getPossibleValues(), f.getDefaultValue(),
                 f.getValidRegexp(), f.getAccessLevelR(), f.getAccessLevelRw(), f.getLengthMin(), f.getLengthMax(),
                 f.isRequireReport(), f.isRequireUpdate(), f.isDisplayReport(), f.isDisplayUpdate(),
-                f.isDisplayResolved(), f.isDisplayClosed(), f.isFilterBy());
+                f.isDisplayResolved(), f.isDisplayClosed(), f.isFilterBy(), projectIds == null ? List.of() : projectIds);
     }
 
     // ------------------------------------------------------------------ read side

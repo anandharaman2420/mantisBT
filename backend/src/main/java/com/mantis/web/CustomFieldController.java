@@ -11,7 +11,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -35,11 +37,19 @@ public class CustomFieldController {
 
     private ResponseStatusException bad(String m) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, m); }
 
-    // ---------------------------------------------------------------- definitions (administrator)
+    // ---------------------------------------------------------------- definitions (administrator + developer read-only)
     @GetMapping("/custom-fields")
     public List<CustomFieldView> list() {
-        access.requireAdmin(current.get());
-        return fields.findAllByOrderByName().stream().map(CustomFieldService::view).toList();
+        User me = current.get();
+        if (me.getAccessLevel() < Lookups.DEVELOPER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        Map<Long, List<Long>> fieldToProjects = links.findAll().stream()
+                .collect(Collectors.groupingBy(l -> l.getField().getId(),
+                        Collectors.mapping(l -> l.getProject().getId(), Collectors.toList())));
+        return fields.findAllByOrderByName().stream()
+                .map(f -> CustomFieldService.view(f, fieldToProjects.getOrDefault(f.getId(), List.of())))
+                .toList();
     }
 
     @PostMapping("/custom-fields")
@@ -48,7 +58,12 @@ public class CustomFieldController {
         if (fields.existsByNameIgnoreCase(f.name().trim())) throw new ResponseStatusException(HttpStatus.CONFLICT, "A custom field with this name already exists");
         CustomField c = new CustomField();
         apply(c, f);
-        return CustomFieldService.view(fields.save(c));
+        CustomField saved = fields.save(c);
+        if (f.projectIds() != null && !f.projectIds().isEmpty()) {
+            syncProjectLinks(saved, f.projectIds());
+        }
+        List<Long> pids = links.findByFieldId(saved.getId()).stream().map(l -> l.getProject().getId()).toList();
+        return CustomFieldService.view(saved, pids);
     }
 
     @PutMapping("/custom-fields/{id}")
@@ -58,7 +73,33 @@ public class CustomFieldController {
         if (!c.getName().equalsIgnoreCase(f.name().trim()) && fields.existsByNameIgnoreCase(f.name().trim()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A custom field with this name already exists");
         apply(c, f);
-        return CustomFieldService.view(c);
+        if (f.projectIds() != null) {
+            syncProjectLinks(c, f.projectIds());
+        }
+        List<Long> pids = links.findByFieldId(c.getId()).stream().map(l -> l.getProject().getId()).toList();
+        return CustomFieldService.view(c, pids);
+    }
+
+    private void syncProjectLinks(CustomField field, List<Long> targetProjectIds) {
+        List<CustomFieldProject> existing = links.findByFieldId(field.getId());
+        Set<Long> targetSet = new HashSet<>(targetProjectIds);
+        for (CustomFieldProject l : existing) {
+            if (!targetSet.contains(l.getProject().getId())) {
+                links.delete(l);
+                values.deleteByFieldAndProject(field.getId(), l.getProject().getId());
+            }
+        }
+        Set<Long> existingProjectIds = existing.stream().map(l -> l.getProject().getId()).collect(Collectors.toSet());
+        for (Long pid : targetProjectIds) {
+            if (!existingProjectIds.contains(pid)) {
+                Project p = access.projectOrThrow(pid);
+                CustomFieldProject n = new CustomFieldProject();
+                n.setField(field);
+                n.setProject(p);
+                n.setSequence((int) links.findByProjectIdOrderBySequenceAscIdAsc(pid).size() + 1);
+                links.save(n);
+            }
+        }
     }
 
     @DeleteMapping("/custom-fields/{id}")

@@ -72,13 +72,26 @@ public class IssueService {
 
     @Transactional(readOnly = true)
     public Page<Issue> search(User me, Filter f, Pageable pg) {
+        Specification<Issue> spec = buildSpecification(me, f);
+        if (spec == null) return Page.empty(pg);
+        return issues.findAll(spec, pg);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Issue> searchAll(User me, Filter f, org.springframework.data.domain.Sort sort) {
+        Specification<Issue> spec = buildSpecification(me, f);
+        if (spec == null) return List.of();
+        return issues.findAll(spec, sort);
+    }
+
+    private Specification<Issue> buildSpecification(User me, Filter f) {
         Map<Long, Integer> levels = access.levels(me);
-        if (f.projectId() != null && !levels.containsKey(f.projectId())) return Page.empty(pg);
-        if (levels.isEmpty()) return Page.empty(pg);
+        if (f.projectId() != null && !levels.containsKey(f.projectId())) return null;
+        if (levels.isEmpty()) return null;
         Set<Long> devProjects = levels.entrySet().stream().filter(e -> e.getValue() >= Lookups.DEVELOPER)
                 .map(Map.Entry::getKey).collect(Collectors.toSet());
 
-        Specification<Issue> spec = (root, q, cb) -> {
+        return (root, q, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             Join<Issue, User> handlerJoin = root.join("handler", JoinType.LEFT);   // handler may be NULL
             Path<Long> pid = root.get("project").get("id");
@@ -117,7 +130,6 @@ public class IssueService {
             if (f.tag() != null && !f.tag().isBlank()) q.distinct(true);
             return cb.and(ps.toArray(new Predicate[0]));
         };
-        return issues.findAll(spec, pg);
     }
 
     // ------------------------------------------------------------------ view

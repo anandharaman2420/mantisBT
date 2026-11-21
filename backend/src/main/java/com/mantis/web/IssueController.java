@@ -35,9 +35,11 @@ public class IssueController {
     private final IssueService issues;
     private final IssueExtrasService extras;
     private final CurrentUser current;
+    private final com.mantis.service.ExportService exportService;
 
-    public IssueController(IssueService issues, IssueExtrasService extras, CurrentUser current) {
-        this.issues = issues; this.extras = extras; this.current = current;
+    public IssueController(IssueService issues, IssueExtrasService extras, CurrentUser current,
+                           com.mantis.service.ExportService exportService) {
+        this.issues = issues; this.extras = extras; this.current = current; this.exportService = exportService;
     }
 
     // ------------------------------------------------------------ list / CRUD
@@ -65,6 +67,58 @@ public class IssueController {
                 priority, severity, categoryId, q, hideClosed, tag), pg);
         return new PageResult<>(result.getContent().stream().map(Mapper::summary).toList(),
                 result.getTotalElements(), result.getNumber(), result.getSize());
+    }
+
+    @GetMapping("/issues/export/csv")
+    public ResponseEntity<byte[]> exportCsv(@RequestParam(required = false) Long projectId,
+                                            @RequestParam(required = false) List<Integer> status,
+                                            @RequestParam(required = false) Long handlerId,
+                                            @RequestParam(required = false) Long reporterId,
+                                            @RequestParam(required = false) Integer priority,
+                                            @RequestParam(required = false) Integer severity,
+                                            @RequestParam(required = false) Long categoryId,
+                                            @RequestParam(required = false) String q,
+                                            @RequestParam(required = false) String tag,
+                                            @RequestParam(defaultValue = "true") boolean hideClosed,
+                                            @RequestParam(defaultValue = "lastUpdated") String sortBy,
+                                            @RequestParam(defaultValue = "desc") String dir) {
+        User me = current.get();
+        String sortField = SORTABLE.contains(sortBy) ? sortBy : "lastUpdated";
+        Sort sort = Sort.by("asc".equalsIgnoreCase(dir) ? Sort.Direction.ASC : Sort.Direction.DESC, sortField)
+                .and(Sort.by(Sort.Direction.DESC, "id"));
+        List<Issue> list = issues.searchAll(me, new IssueService.Filter(projectId, status, handlerId, reporterId,
+                priority, severity, categoryId, q, hideClosed, tag), sort);
+        byte[] csv = exportService.exportCsv(list);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"issues.csv\"")
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csv);
+    }
+
+    @GetMapping("/issues/export/excel")
+    public ResponseEntity<byte[]> exportExcel(@RequestParam(required = false) Long projectId,
+                                              @RequestParam(required = false) List<Integer> status,
+                                              @RequestParam(required = false) Long handlerId,
+                                              @RequestParam(required = false) Long reporterId,
+                                              @RequestParam(required = false) Integer priority,
+                                              @RequestParam(required = false) Integer severity,
+                                              @RequestParam(required = false) Long categoryId,
+                                              @RequestParam(required = false) String q,
+                                              @RequestParam(required = false) String tag,
+                                              @RequestParam(defaultValue = "true") boolean hideClosed,
+                                              @RequestParam(defaultValue = "lastUpdated") String sortBy,
+                                              @RequestParam(defaultValue = "desc") String dir) {
+        User me = current.get();
+        String sortField = SORTABLE.contains(sortBy) ? sortBy : "lastUpdated";
+        Sort sort = Sort.by("asc".equalsIgnoreCase(dir) ? Sort.Direction.ASC : Sort.Direction.DESC, sortField)
+                .and(Sort.by(Sort.Direction.DESC, "id"));
+        List<Issue> list = issues.searchAll(me, new IssueService.Filter(projectId, status, handlerId, reporterId,
+                priority, severity, categoryId, q, hideClosed, tag), sort);
+        byte[] xls = exportService.exportExcelXml(list);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"issues.xls\"")
+                .contentType(MediaType.parseMediaType("application/vnd.ms-excel; charset=UTF-8"))
+                .body(xls);
     }
 
     @GetMapping("/issues/{id}")

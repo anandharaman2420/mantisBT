@@ -85,12 +85,13 @@ public final class Dtos {
     public record CustomFieldView(Long id, String name, int type, String possibleValues, String defaultValue,
                                   String validRegexp, int accessLevelR, int accessLevelRw, int lengthMin, int lengthMax,
                                   boolean requireReport, boolean requireUpdate, boolean displayReport,
-                                  boolean displayUpdate, boolean displayResolved, boolean displayClosed, boolean filterBy) {}
+                                  boolean displayUpdate, boolean displayResolved, boolean displayClosed, boolean filterBy,
+                                  List<Long> projectIds) {}
     public record CustomFieldForm(@NotBlank @Size(max = 64) String name, Integer type, String possibleValues,
                                   String defaultValue, String validRegexp, Integer accessLevelR, Integer accessLevelRw,
                                   Integer lengthMin, Integer lengthMax, Boolean requireReport, Boolean requireUpdate,
                                   Boolean displayReport, Boolean displayUpdate, Boolean displayResolved,
-                                  Boolean displayClosed, Boolean filterBy) {}
+                                  Boolean displayClosed, Boolean filterBy, List<Long> projectIds) {}
     public record FieldLinkForm(@NotNull Long fieldId, Integer sequence) {}
     /** one custom field of one issue (or of the report form): definition + current value */
     public record IssueFieldValue(Long fieldId, String name, int type, String value, List<String> options,
@@ -100,4 +101,12 @@ public final class Dtos {
     public record CountEntry(int key, String label, long count) {}
     public record SummaryView(long total, List<CountEntry> byStatus, List<CountEntry> byPriority,
                               List<CountEntry> bySeverity, long unassigned, long open) {}
+
+    public record FilterCriteria(Long projectId, List<Integer> status, Long handlerId, Long reporterId,
+                                 Integer priority, Integer severity, Long categoryId, String q,
+                                 Boolean hideClosed, String tag, String sortBy, String dir) {}
+    public record SavedFilterView(Long id, String name, Long projectId, String projectName,
+                                  UserRef user, boolean isPublic, FilterCriteria criteria) {}
+    public record SavedFilterForm(@NotBlank @Size(max = 64) String name, Long projectId,
+                                  Boolean isPublic, FilterCriteria criteria) {}
 }

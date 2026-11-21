@@ -14,7 +14,8 @@ import { AuthService } from './core/auth.service';
         <a routerLink="/issues" routerLinkActive="on">View Issues</a>
         <a routerLink="/report" routerLinkActive="on">Report Issue</a>
         <a routerLink="/projects" routerLinkActive="on">Manage Projects</a>
-        @if (auth.isAdmin()) { <a routerLink="/users" routerLinkActive="on">Manage Users</a> <a routerLink="/custom-fields" routerLinkActive="on">Custom Fields</a> }
+        @if (auth.isAdmin()) { <a routerLink="/users" routerLinkActive="on">Manage Users</a> }
+        @if (auth.isAdmin() || (auth.user()?.accessLevel ?? 0) >= 55) { <a routerLink="/custom-fields" routerLinkActive="on">Custom Fields</a> }
       </nav>
       <span class="sp"></span>
       <select class="proj" [ngModel]="auth.projectId()" (ngModelChange)="auth.selectProject($event)">

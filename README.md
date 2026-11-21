@@ -56,15 +56,24 @@ MAIL_AUTH=true  MAIL_STARTTLS=true  MAIL_FROM=mantis@example.com  APP_BASE_URL=h
 
 ### Custom fields
 Administrator defines fields (*Custom Fields* page); a project manager links them to projects
-(*Manage Projects → Custom fields*). All 11 Mantis types: string, text area, integer, decimal, e-mail, date,
+(*Manage Projects → Custom fields* or directly from *Custom Fields*). All 11 Mantis types: string, text area, integer, decimal, e-mail, date,
 enumeration, list, radio, checkbox, multi-select. Per field: visible-from / editable-from access level, required on
 report / update, min/max length (or value), regular expression, default value. Values are validated on the server and
 changes are written to the issue history. The importer (`tools/import_mantis.py`) copies definitions, project links
 and values from a live MantisBT database.
 
+### Saved filters
+Users can save current issue search criteria (status, priority, severity, category, assignee, text search, hide closed, sorting)
+as named private or shared public filters. Quick one-click selection and application directly from the *View Issues* filter bar.
+Persisted in `mantis_filters_table`.
+
+### CSV and Excel export
+Export current filtered issue lists to:
+* **CSV** (`.csv`): Standard RFC 4180 format with UTF-8 BOM so Microsoft Excel and Google Sheets open special characters seamlessly.
+* **Excel** (`.xls`): SpreadsheetML 2003 XML format with native styling (bold headers, colored header row, correct column widths and data types).
+
 ### Still open for phase 3
-Saved filters, CSV/Excel export, time tracking, move/clone issue, bulk actions, project hierarchy,
-SOAP/REST compatibility, localisation.
+Time tracking, move/clone issue, bulk actions, project hierarchy, SOAP/REST compatibility, localisation.
 
 ## Important notes
 * Existing databases: new columns/tables are added by `ddl-auto=update`; new columns carry DDL defaults so existing rows stay valid.

@@ -114,7 +114,18 @@ export class IssueFormComponent implements OnInit {
       });
     } else {
       this.m.projectId = this.auth.projectId();
+      if (!this.m.projectId && this.auth.projects().length) {
+        this.m.projectId = this.auth.projects()[0].id;
+      }
       this.loadProject();
+      if (!this.m.projectId) {
+        this.api.projects().subscribe(ps => {
+          if (!this.m.projectId && ps.length) {
+            this.m.projectId = ps[0].id;
+            this.loadProject();
+          }
+        });
+      }
     }
   }
 

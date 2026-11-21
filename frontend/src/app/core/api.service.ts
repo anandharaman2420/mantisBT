@@ -44,16 +44,40 @@ export class ApiService {
   deleteUser(id: number) { return this.http.delete<void>(`${this.base}/users/${id}`); }
 
   // issues
-  issues(q: M.IssueQuery): Observable<M.PageResult<M.IssueSummary>> {
+  private buildIssueParams(q: M.IssueQuery): HttpParams {
     let p = new HttpParams();
     const set = (k: string, v: unknown) => { if (v !== null && v !== undefined && v !== '') p = p.append(k, String(v)); };
     set('projectId', q.projectId); set('handlerId', q.handlerId); set('reporterId', q.reporterId);
     set('priority', q.priority); set('severity', q.severity); set('categoryId', q.categoryId);
     set('q', q.q); set('tag', q.tag); set('hideClosed', q.hideClosed); set('sortBy', q.sortBy);
-    set('dir', q.dir); set('page', q.page); set('size', q.size);
+    set('dir', q.dir);
+    if (q.page !== undefined) set('page', q.page);
+    if (q.size !== undefined) set('size', q.size);
     (q.status ?? []).forEach(s => set('status', s));
-    return this.http.get<M.PageResult<M.IssueSummary>>(`${this.base}/issues`, { params: p });
+    return p;
   }
+
+  issues(q: M.IssueQuery): Observable<M.PageResult<M.IssueSummary>> {
+    return this.http.get<M.PageResult<M.IssueSummary>>(`${this.base}/issues`, { params: this.buildIssueParams(q) });
+  }
+
+  exportCsv(q: M.IssueQuery): Observable<Blob> {
+    return this.http.get(`${this.base}/issues/export/csv`, { params: this.buildIssueParams(q), responseType: 'blob' });
+  }
+
+  exportExcel(q: M.IssueQuery): Observable<Blob> {
+    return this.http.get(`${this.base}/issues/export/excel`, { params: this.buildIssueParams(q), responseType: 'blob' });
+  }
+
+  // saved filters
+  savedFilters(projectId?: number | null): Observable<M.SavedFilterView[]> {
+    let p = new HttpParams();
+    if (projectId) p = p.set('projectId', projectId);
+    return this.http.get<M.SavedFilterView[]>(`${this.base}/filters`, { params: p });
+  }
+  createFilter(f: M.SavedFilterForm): Observable<M.SavedFilterView> { return this.http.post<M.SavedFilterView>(`${this.base}/filters`, f); }
+  updateFilter(id: number, f: M.SavedFilterForm): Observable<M.SavedFilterView> { return this.http.put<M.SavedFilterView>(`${this.base}/filters/${id}`, f); }
+  deleteFilter(id: number): Observable<void> { return this.http.delete<void>(`${this.base}/filters/${id}`); }
   issue(id: number) { return this.http.get<M.IssueView>(`${this.base}/issues/${id}`); }
   createIssue(f: M.IssueForm) { return this.http.post<M.IssueView>(`${this.base}/issues`, f); }
   updateIssue(id: number, f: M.IssueForm) { return this.http.put<M.IssueView>(`${this.base}/issues/${id}`, f); }

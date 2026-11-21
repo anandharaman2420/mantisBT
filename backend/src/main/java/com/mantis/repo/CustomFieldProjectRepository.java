@@ -7,6 +7,7 @@ import java.util.Optional;
 
 public interface CustomFieldProjectRepository extends JpaRepository<CustomFieldProject, Long> {
     List<CustomFieldProject> findByProjectIdOrderBySequenceAscIdAsc(Long projectId);
+    List<CustomFieldProject> findByFieldId(Long fieldId);
     Optional<CustomFieldProject> findByFieldIdAndProjectId(Long fieldId, Long projectId);
     void deleteByProjectId(Long projectId);
     void deleteByFieldId(Long fieldId);

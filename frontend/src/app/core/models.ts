@@ -46,7 +46,7 @@ export interface SummaryView { total: number; byStatus: CountEntry[]; byPriority
 export interface CustomFieldView { id: number; name: string; type: number; possibleValues: string; defaultValue: string;
   validRegexp: string; accessLevelR: number; accessLevelRw: number; lengthMin: number; lengthMax: number;
   requireReport: boolean; requireUpdate: boolean; displayReport: boolean; displayUpdate: boolean;
-  displayResolved: boolean; displayClosed: boolean; filterBy: boolean; }
+  displayResolved: boolean; displayClosed: boolean; filterBy: boolean; projectIds?: number[]; }
 /** one custom field of an issue (or of the report form): definition + current value */
 export interface IssueFieldValue { fieldId: number; name: string; type: number; value: string; options: string[];
   required: boolean; canEdit: boolean; }
@@ -65,3 +65,35 @@ export interface IssueQuery {
 }
 
 export const ACCESS = { VIEWER: 10, REPORTER: 25, UPDATER: 40, DEVELOPER: 55, MANAGER: 70, ADMINISTRATOR: 90 };
+
+export interface FilterCriteria {
+  projectId?: number | null;
+  status?: number[];
+  handlerId?: number | null;
+  reporterId?: number | null;
+  priority?: number | null;
+  severity?: number | null;
+  categoryId?: number | null;
+  q?: string;
+  hideClosed?: boolean;
+  tag?: string;
+  sortBy?: string;
+  dir?: string;
+}
+
+export interface SavedFilterView {
+  id: number;
+  name: string;
+  projectId: number | null;
+  projectName: string | null;
+  user: UserRef;
+  isPublic: boolean;
+  criteria: FilterCriteria;
+}
+
+export interface SavedFilterForm {
+  name: string;
+  projectId?: number | null;
+  isPublic?: boolean;
+  criteria: FilterCriteria;
+}
