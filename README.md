@@ -38,9 +38,36 @@ Config via env vars: `DB_URL DB_USER DB_PASSWORD JWT_SECRET CORS_ORIGINS`.
 Deliberate differences: `bug_table` + `bug_text_table` and `bugnote` + `bugnote_text` are merged into one entity each; "no handler" is `NULL` instead of `0`; real foreign keys are created.
 
 ## NOT migrated yet (phase 2)
-E-mail notifications (add `spring-boot-starter-mail`, hook into `IssueService`), custom fields, saved filters, time tracking/billing, sponsorship, plugin system, LDAP, SOAP API & Mantis REST API compatibility, CSV/Excel export, RSS, wiki, localisation (40 languages), project hierarchy/inheritance, move/clone issue, bulk actions.
+Saved filters, time tracking/billing, sponsorship, plugin system, LDAP, SOAP API & Mantis REST API compatibility, CSV/Excel export, RSS, wiki, localisation (40 languages), project hierarchy/inheritance, move/clone issue, bulk actions.
+
+## Phase 2 (done)
+
+### E-mail notifications
+Sent on: new issue, issue update / status change / assignment, new note. Recipients are the reporter, the handler and
+everyone monitoring the issue – never the person who made the change, never users who switched notifications off
+(*My Account*), and never users who may not see the issue (private issues / private notes).
+Mails are sent asynchronously **after** the database commit; an SMTP failure never breaks the user's request.
+Disabled by default. Enable with environment variables:
+
+```
+MAIL_ENABLED=true  MAIL_HOST=smtp.example.com  MAIL_PORT=587  MAIL_USER=...  MAIL_PASSWORD=...
+MAIL_AUTH=true  MAIL_STARTTLS=true  MAIL_FROM=mantis@example.com  APP_BASE_URL=https://bugs.example.com
+```
+
+### Custom fields
+Administrator defines fields (*Custom Fields* page); a project manager links them to projects
+(*Manage Projects → Custom fields*). All 11 Mantis types: string, text area, integer, decimal, e-mail, date,
+enumeration, list, radio, checkbox, multi-select. Per field: visible-from / editable-from access level, required on
+report / update, min/max length (or value), regular expression, default value. Values are validated on the server and
+changes are written to the issue history. The importer (`tools/import_mantis.py`) copies definitions, project links
+and values from a live MantisBT database.
+
+### Still open for phase 3
+Saved filters, CSV/Excel export, time tracking, move/clone issue, bulk actions, project hierarchy,
+SOAP/REST compatibility, localisation.
 
 ## Important notes
+* Existing databases: new columns/tables are added by `ddl-auto=update`; new columns carry DDL defaults so existing rows stay valid.
 * The **frontend was built successfully** (`ng build`). The **backend could not be compiled in the sandbox** (no access to Maven Central); I checked the Java syntax of all files, but expect to fix a few small compile/runtime issues on your first `mvn spring-boot:run`.
 * `ddl-auto=update` is convenient for development; for production switch to Flyway/Liquibase.
 * To import existing MantisBT data, write an SQL script mapping `handler_id = 0 → NULL` and joining `bug_text`/`bugnote_text` into the merged tables.
