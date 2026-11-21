@@ -88,7 +88,7 @@ export class ApiService {
   }
   history(id: number) { return this.http.get<M.HistoryView[]>(`${this.base}/issues/${id}/history`); }
   notes(id: number) { return this.http.get<M.NoteView[]>(`${this.base}/issues/${id}/notes`); }
-  addNote(id: number, text: string, viewState: number) { return this.http.post<M.NoteView>(`${this.base}/issues/${id}/notes`, { text, viewState }); }
+  addNote(id: number, text: string, viewState: number, timeMinutes?: number) { return this.http.post<M.NoteView>(`${this.base}/issues/${id}/notes`, { text, viewState, timeMinutes: timeMinutes || null }); }
   updateNote(noteId: number, text: string, viewState: number) { return this.http.put<M.NoteView>(`${this.base}/notes/${noteId}`, { text, viewState }); }
   deleteNote(noteId: number) { return this.http.delete<void>(`${this.base}/notes/${noteId}`); }
   attachments(id: number) { return this.http.get<M.AttachmentView[]>(`${this.base}/issues/${id}/attachments`); }
@@ -103,6 +103,13 @@ export class ApiService {
   relationships(id: number) { return this.http.get<M.RelationshipView[]>(`${this.base}/issues/${id}/relationships`); }
   addRelationship(id: number, type: number, otherIssueId: number) { return this.http.post<M.RelationshipView>(`${this.base}/issues/${id}/relationships`, { type, otherIssueId }); }
   deleteRelationship(relId: number) { return this.http.delete<void>(`${this.base}/relationships/${relId}`); }
+
+  // config / time tracking
+  config() { return this.http.get<M.AppConfig>(`${this.base}/config`); }
+  timeReport(projectId: number | null, from: string, to: string) {
+    const params: any = { from, to }; if (projectId) params.projectId = projectId;
+    return this.http.get<M.TimeReport>(`${this.base}/time-tracking`, { params });
+  }
 
   // bulk / move / copy
   bulk(req: any) { return this.http.post<M.BulkResult>(`${this.base}/issues/bulk`, req); }

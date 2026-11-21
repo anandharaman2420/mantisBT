@@ -114,7 +114,7 @@ public class BulkService {
                 if (action.equals("add_tags")) names.addAll(change); else names.removeAll(change);
                 issues.update(me, id, form(Map.of("tags", new ArrayList<>(names))));
             }
-            case "add_note" -> extras.addNote(me, id, new NoteForm(r.text(), r.intValue(), null));
+            case "add_note" -> extras.addNote(me, id, new NoteForm(r.text(), r.intValue(), null, null));
             case "delete" -> issues.delete(me, id);
             case "move" -> issues.move(me, id, r.longValue());
             case "copy" -> issues.copy(me, id, new CopyForm(r.longValue(), false, false, true));

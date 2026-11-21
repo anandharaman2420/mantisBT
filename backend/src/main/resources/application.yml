@@ -34,6 +34,8 @@ app:
   mail:
     enabled: ${MAIL_ENABLED:false}                    # set MAIL_ENABLED=true once SMTP is configured
     from: ${MAIL_FROM:mantis@localhost}
+  time-tracking:
+    enabled: ${TIME_TRACKING_ENABLED:true}            # developers can log time on notes, managers get the time report
   cors-origins: ${CORS_ORIGINS:http://localhost:4200}
   # default admin created on first start (same defaults as MantisBT: administrator / root)
   seed:

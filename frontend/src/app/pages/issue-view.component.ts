@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
+import { fmtMinutes, parseTime } from '../core/time';
 import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, UserRef } from '../core/models';
 
 @Component({
@@ -114,11 +115,12 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
       </div>
     }
 
-    <div class="panel"><h2>Notes ({{ notes.length }})</h2>
+    <div class="panel"><h2>Notes ({{ notes.length }}) @if (i.timeMinutes) { <span class="muted" style="font-weight:400">· time spent: {{ fmt(i.timeMinutes) }} h</span> }</h2>
       @for (n of notes; track n.id) {
         <div class="note" [class.private]="n.viewState === 50">
           <div class="muted"><b style="color:var(--text)">{{ n.reporter.username }}</b> · {{ n.dateSubmitted | date:'yyyy-MM-dd HH:mm' }}
             @if (n.viewState === 50) { · 🔒 private }
+            @if (n.timeMinutes) { · ⏱ {{ fmt(n.timeMinutes) }} h }
             @if (n.canEdit) { · <a href="#" (click)="editNote(n); $event.preventDefault()">edit</a> · <a href="#" (click)="deleteNote(n); $event.preventDefault()">delete</a> }</div>
           @if (editingNote?.id === n.id) {
             <textarea [(ngModel)]="editText" rows="3"></textarea>
@@ -130,6 +132,7 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
         <div style="margin-top:12px"><label>Add note</label><textarea [(ngModel)]="newNote" rows="3"></textarea>
           <div class="row" style="margin-top:6px;align-items:center">
             @if (isDev()) { <label style="display:flex;gap:5px;align-items:center;margin:0;font-weight:400"><input type="checkbox" [(ngModel)]="notePrivate"> private</label> }
+            @if (auth.config().timeTracking && isDev()) { <input style="width:170px" [(ngModel)]="timeText" placeholder="time spent (h:mm)" title="e.g. 1:30, 90, 1.5h"> }
             <button class="primary" (click)="addNote()" [disabled]="!newNote.trim()">Add note</button></div></div>
       }
     </div>
@@ -155,6 +158,7 @@ export class IssueViewComponent implements OnInit, OnChanges {
   i: IssueView | null = null; error = '';
   notes: NoteView[] = []; files: AttachmentView[] = []; rels: RelationshipView[] = []; hist: HistoryView[] = [];
   handlers: UserRef[] = []; showHistory = false;
+  fmt = fmtMinutes; timeText = '';
   newNote = ''; notePrivate = false; editingNote: { id: number; text: string; viewState: number } | null = null;
   editText = '';
   relType = 1; relOther: number | null = null;
@@ -215,8 +219,10 @@ export class IssueViewComponent implements OnInit, OnChanges {
       .subscribe({ next: () => { this.st.note = ''; this.error = ''; this.load(); }, error: this.fail });
   }
   addNote() {
-    this.api.addNote(this.i!.id, this.newNote, this.notePrivate ? 50 : 10)
-      .subscribe({ next: () => { this.newNote = ''; this.notePrivate = false; this.load(); }, error: this.fail });
+    const minutes = parseTime(this.timeText);
+    if (minutes === null) { this.error = 'Time must look like 1:30, 90 or 1.5h'; return; }
+    this.api.addNote(this.i!.id, this.newNote, this.notePrivate ? 50 : 10, minutes)
+      .subscribe({ next: () => { this.newNote = ''; this.notePrivate = false; this.timeText = ''; this.error = ''; this.load(); }, error: this.fail });
   }
   editNote(n: NoteView) { this.editingNote = { id: n.id, text: n.text, viewState: n.viewState }; this.editText = n.text; }
   saveNote() {

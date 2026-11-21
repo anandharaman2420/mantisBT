@@ -14,6 +14,7 @@ import { AuthService } from './core/auth.service';
         <a routerLink="/issues" routerLinkActive="on">View Issues</a>
         <a routerLink="/report" routerLinkActive="on">Report Issue</a>
         <a routerLink="/projects" routerLinkActive="on">Manage Projects</a>
+        @if (auth.config().timeTracking && auth.isManager()) { <a routerLink="/time-report" routerLinkActive="on">Time Report</a> }
         @if (auth.isAdmin()) { <a routerLink="/users" routerLinkActive="on">Manage Users</a> }
         @if (auth.isAdmin() || (auth.user()?.accessLevel ?? 0) >= 55) { <a routerLink="/custom-fields" routerLinkActive="on">Custom Fields</a> }
       </nav>

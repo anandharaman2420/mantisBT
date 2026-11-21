@@ -50,7 +50,7 @@ public final class Dtos {
                             String targetVersion, String build, int viewState, boolean sticky,
                             Instant dateSubmitted, Instant lastUpdated, List<String> tags, List<UserRef> monitors,
                             boolean monitoring, boolean canUpdate, boolean canChangeStatus, boolean canDelete,
-                            boolean canAddNote, boolean canAttach, List<IssueFieldValue> customFields) {}
+                            boolean canAddNote, boolean canAttach, List<IssueFieldValue> customFields, int timeMinutes) {}
 
     /** Used for create (nulls -> defaults) and update (nulls -> unchanged). */
     public record IssueForm(Long projectId, Long categoryId, @Size(max = 128) String summary, String description,
@@ -64,9 +64,10 @@ public final class Dtos {
     public record StatusChange(@NotNull Integer status, Integer resolution, Long handlerId, Long duplicateId,
                                String note) {}
 
-    public record NoteView(Long id, UserRef reporter, String text, int viewState, int noteType,
+    public record NoteView(Long id, UserRef reporter, String text, int viewState, int noteType, int timeMinutes,
                            Instant dateSubmitted, Instant lastModified, boolean canEdit) {}
-    public record NoteForm(@NotBlank String text, Integer viewState, Integer noteType) {}
+    /** timeMinutes: time spent (developers only, only when time tracking is enabled) */
+    public record NoteForm(@NotBlank String text, Integer viewState, Integer noteType, Integer timeMinutes) {}
 
     public record AttachmentView(Long id, String title, String filename, Long filesize, String fileType,
                                  Instant dateAdded, boolean canDelete) {}
@@ -105,6 +106,11 @@ public final class Dtos {
                               Long longValue, String text, Integer resolution) {}
     public record BulkFailure(Long issueId, String message) {}
     public record BulkResult(int succeeded, List<BulkFailure> failures) {}
+
+    public record AppConfig(boolean timeTracking) {}
+    public record TimeEntry(Long issueId, String summary, String projectName, UserRef user, Instant date, int minutes, String note) {}
+    public record TimeUserTotal(UserRef user, long minutes) {}
+    public record TimeReport(List<TimeEntry> entries, List<TimeUserTotal> byUser, long totalMinutes) {}
 
     public record PageResult<T>(List<T> items, long total, int page, int size) {}
     public record CountEntry(int key, String label, long count) {}

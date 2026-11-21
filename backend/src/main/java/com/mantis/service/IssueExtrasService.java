@@ -31,15 +31,17 @@ public class IssueExtrasService {
     private final HistoryService history;
     private final NotificationService notifier;
     private final ProjectRepository projects;
+    private final boolean trackTime;
 
     public IssueExtrasService(IssueService issueService, IssueRepository issues, NoteRepository notes,
                               AttachmentRepository attachments, HistoryRepository historyRepo, MonitorRepository monitors,
                               RelationshipRepository relationships, UserRepository users, CategoryRepository categories,
                               AccessService access, HistoryService history, NotificationService notifier,
-                              ProjectRepository projects) {
+                              ProjectRepository projects,
+                              @org.springframework.beans.factory.annotation.Value("${app.time-tracking.enabled}") boolean trackTime) {
         this.issueService = issueService; this.issues = issues; this.notes = notes; this.attachments = attachments;
         this.historyRepo = historyRepo; this.monitors = monitors; this.relationships = relationships;
-        this.users = users; this.categories = categories; this.access = access; this.history = history; this.notifier = notifier; this.projects = projects;
+        this.users = users; this.categories = categories; this.access = access; this.history = history; this.notifier = notifier; this.projects = projects; this.trackTime = trackTime;
     }
 
     private ResponseStatusException denied() { return new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"); }
@@ -54,7 +56,7 @@ public class IssueExtrasService {
         for (Note n : notes.findByIssueIdOrderByDateSubmittedAsc(issueId)) {
             boolean own = n.getReporter().getId().equals(me.getId());
             if (n.getViewState() == Lookups.VS_PRIVATE && lvl < Lookups.DEVELOPER && !own) continue;
-            out.add(noteView(n, canEditNote(me, lvl, n)));
+            out.add(noteView(n, canEditNote(me, lvl, n), lvl >= Lookups.DEVELOPER));
         }
         return out;
     }
@@ -72,11 +74,12 @@ public class IssueExtrasService {
         if (vs == Lookups.VS_PRIVATE && lvl < Lookups.DEVELOPER) throw denied();
         n.setViewState(vs);
         n.setNoteType(f.noteType() == null ? 0 : IssueService.valid(Lookups.NOTE_TYPE, f.noteType(), "noteType"));
+        applyTime(n, f.timeMinutes(), lvl);
         notes.save(n);
         history.log(me, i, "", null, n.getId(), Lookups.H_NOTE_ADDED);
         i.setLastUpdated(Instant.now());
         notifier.noteAdded(me, i, n);
-        return noteView(n, true);
+        return noteView(n, true, true);
     }
 
     public NoteView updateNote(User me, Long noteId, NoteForm f) {
@@ -85,6 +88,7 @@ public class IssueExtrasService {
         int lvl = access.levelIn(me, i.getProject());
         if (!canEditNote(me, lvl, n)) throw denied();
         n.setText(f.text());
+        if (f.timeMinutes() != null) applyTime(n, f.timeMinutes(), lvl);
         if (f.viewState() != null) {
             int vs = IssueService.valid(Lookups.VIEW_STATE, f.viewState(), "viewState");
             if (vs == Lookups.VS_PRIVATE && lvl < Lookups.DEVELOPER) throw denied();
@@ -92,7 +96,7 @@ public class IssueExtrasService {
         }
         n.setLastModified(Instant.now());
         history.log(me, i, "", null, n.getId(), Lookups.H_NOTE_UPDATED);
-        return noteView(n, true);
+        return noteView(n, true, lvl >= Lookups.DEVELOPER);
     }
 
     public void deleteNote(User me, Long noteId) {
@@ -107,8 +111,20 @@ public class IssueExtrasService {
         return lvl >= Lookups.DEVELOPER || (lvl >= Lookups.REPORTER && n.getReporter().getId().equals(me.getId()));
     }
 
-    private NoteView noteView(Note n, boolean canEdit) {
+    /** time tracking: only developers (Mantis time_tracking_edit_threshold) and only when enabled; 0 = no time */
+    private void applyTime(Note n, Integer minutes, int lvl) {
+        if (minutes == null || (minutes == 0 && n.getTimeTracking() == 0)) return;
+        if (!trackTime) throw bad("Time tracking is disabled");
+        if (lvl < Lookups.DEVELOPER) throw denied();
+        if (minutes < 0 || minutes > 24 * 60 * 31) throw bad("Time must be between 0 and 31 days");
+        n.setTimeTracking(minutes);
+        if (minutes > 0) n.setNoteType(2);                       // TIME_TRACKING note
+        else if (n.getNoteType() == 2) n.setNoteType(0);
+    }
+
+    private NoteView noteView(Note n, boolean canEdit, boolean showTime) {
         return new NoteView(n.getId(), Mapper.ref(n.getReporter()), n.getText(), n.getViewState(), n.getNoteType(),
+                showTime && trackTime ? n.getTimeTracking() : 0,
                 n.getDateSubmitted(), n.getLastModified(), canEdit);
     }
 

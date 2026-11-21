@@ -147,11 +147,11 @@ def main():
     # ---- notes
     ntext = {t['id']: t['note'] for t in rows('bugnote_text', 'id,note')}
     notes_out = []
-    for r in rows('bugnote', 'id,bug_id,reporter_id,bugnote_text_id,view_state,date_submitted,last_modified,note_type'):
+    for r in rows('bugnote', 'id,bug_id,reporter_id,bugnote_text_id,view_state,date_submitted,last_modified,note_type,time_tracking'):
         if r['bug_id'] not in bug_ids: W('note skipped (unknown issue)'); continue
         rep = r['reporter_id'] if r['reporter_id'] in user_ids else admin_id
         notes_out.append((r['id'], r['bug_id'], rep, s(ntext.get(r['bugnote_text_id'])), i(r['view_state'], 10),
-                          ts(r['date_submitted'], EPOCH), ts(r['last_modified'], EPOCH), i(r['note_type'])))
+                          ts(r['date_submitted'], EPOCH), ts(r['last_modified'], EPOCH), i(r['note_type']), max(i(r['time_tracking']), 0)))
 
     monitors = {(r['user_id'], r['bug_id']) for r in rows('bug_monitor', 'user_id,bug_id')}
     monitors = [m for m in monitors if m[0] in user_ids and m[1] in bug_ids]
@@ -273,7 +273,7 @@ def main():
     ins('custom_field_string', 'field_id,bug_id,value', [v for v in cf_values if v[0] in kept_cf])
     kept_tags = {t[0] for t in trows}
     ins('bug_tag', 'bug_id,tag_id', [x for x in bug_tags if x[1] in kept_tags])
-    ins('bugnote', 'id,bug_id,reporter_id,text,view_state,date_submitted,last_modified,note_type', notes_out)
+    ins('bugnote', 'id,bug_id,reporter_id,text,view_state,date_submitted,last_modified,note_type,time_tracking', notes_out)
     ins('bug_monitor', 'user_id,bug_id', monitors)
     ins('bug_relationship', 'id,source_bug_id,destination_bug_id,relationship_type', rels)
     ins('bug_history', 'id,bug_id,user_id,field_name,old_value,new_value,type,date_modified', hist)

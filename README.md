@@ -72,8 +72,28 @@ Export current filtered issue lists to:
 * **CSV** (`.csv`): Standard RFC 4180 format with UTF-8 BOM so Microsoft Excel and Google Sheets open special characters seamlessly.
 * **Excel** (`.xls`): SpreadsheetML 2003 XML format with native styling (bold headers, colored header row, correct column widths and data types).
 
-### Still open for phase 3
-Time tracking, move/clone issue, bulk actions, project hierarchy, SOAP/REST compatibility, localisation.
+## Phase 3 (in progress)
+
+### Bulk actions, move and copy issue
+* **View Issues**: tick issues in the first column, choose an action, *Apply*. Actions: assign, change status / resolve / close,
+  priority, severity, visibility, category, "fixed in" / target version, sticky, add note, add / remove tags, move, copy, delete
+  (max. 200 issues per request).
+* Each issue is processed in **its own transaction** through the normal single-issue code, so permissions, workflow rules,
+  history entries and e-mails are exactly the same as for a manual edit. Issues that fail (no access, read-only ...) are listed
+  with the reason; the others are still done.
+* **Move** (issue page → *Move / Copy…*): the issue keeps its number and history. Category is matched by name, the assignee is removed
+  if he is not a developer in the target project, custom field values the target project does not use are dropped.
+  Needs *developer* in the source and *reporter* in the target project.
+* **Copy**: creates a new issue (status *new*, you as reporter, unassigned) incl. tags and custom fields; optionally copies notes and
+  files and links it as "related to" the original.
+
+### Time tracking
+Developers can log time spent on a note (`1:30`, `90`, `1.5h`); the issue shows the total. Managers get a **Time Report** page
+(per project and period, totals per user, CSV export). Same access rules as Mantis (view / edit: developer, report: manager).
+On by default; `TIME_TRACKING_ENABLED=false` switches it off. The importer copies existing `time_tracking` values.
+
+### Still open
+Project hierarchy (sub-projects), SOAP/REST compatibility, localisation.
 
 ## Important notes
 * Existing databases: new columns/tables are added by `ddl-auto=update`; new columns carry DDL defaults so existing rows stay valid.

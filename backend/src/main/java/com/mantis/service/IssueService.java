@@ -37,6 +37,7 @@ public class IssueService {
     private final AccessService access;
     private final HistoryService history;
     private final NotificationService notifier;
+    private final boolean trackTime;
     private final CustomFieldService customFields;
     private final CustomFieldValueRepository fieldValues;
 
@@ -44,11 +45,12 @@ public class IssueService {
                         NoteRepository notes, AttachmentRepository attachments, HistoryRepository historyRepo,
                         MonitorRepository monitors, RelationshipRepository relationships, AccessService access,
                         HistoryService history, NotificationService notifier,
-                        CustomFieldService customFields, CustomFieldValueRepository fieldValues) {
+                        CustomFieldService customFields, CustomFieldValueRepository fieldValues,
+                        @org.springframework.beans.factory.annotation.Value("${app.time-tracking.enabled}") boolean trackTime) {
         this.issues = issues; this.categories = categories; this.users = users; this.tags = tags;
         this.notes = notes; this.attachments = attachments; this.historyRepo = historyRepo; this.monitors = monitors;
         this.relationships = relationships; this.access = access; this.history = history; this.notifier = notifier;
-        this.customFields = customFields; this.fieldValues = fieldValues;
+        this.customFields = customFields; this.fieldValues = fieldValues; this.trackTime = trackTime;
     }
 
     // ------------------------------------------------------------------ errors
@@ -154,7 +156,8 @@ public class IssueService {
                 i.getDateSubmitted(), i.getLastUpdated(), tagNames, monitorRefs, monitoring,
                 canUpdate, lvl >= Lookups.DEVELOPER, lvl >= Lookups.DEVELOPER,
                 lvl >= Lookups.REPORTER && (!readonly || lvl >= Lookups.MANAGER), lvl >= Lookups.REPORTER,
-                customFields.forIssue(i, lvl));
+                customFields.forIssue(i, lvl),
+                trackTime && lvl >= Lookups.DEVELOPER ? (int) notes.sumMinutes(i.getId()) : 0);
     }
 
     // ------------------------------------------------------------------ create (bug_report.php / bug_api bug_create)

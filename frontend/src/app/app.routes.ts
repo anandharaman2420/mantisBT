@@ -15,6 +15,7 @@ export const routes: Routes = [
       { path: 'projects', loadComponent: () => import('./pages/projects.component').then(m => m.ProjectsComponent) },
       { path: 'users', canActivate: [adminGuard], loadComponent: () => import('./pages/users.component').then(m => m.UsersComponent) },
       { path: 'custom-fields', canActivate: [developerOrAdminGuard], loadComponent: () => import('./pages/custom-fields.component').then(m => m.CustomFieldsComponent) },
+      { path: 'time-report', loadComponent: () => import('./pages/time-report.component').then(m => m.TimeReportComponent) },
       { path: 'account', loadComponent: () => import('./pages/account.component').then(m => m.AccountComponent) }
     ]
   },

@@ -19,7 +19,7 @@ export interface IssueView {
   os: string; osBuild: string; platform: string; version: string; fixedInVersion: string; targetVersion: string;
   build: string; viewState: number; sticky: boolean; dateSubmitted: string; lastUpdated: string;
   tags: string[]; monitors: UserRef[]; monitoring: boolean; canUpdate: boolean; canChangeStatus: boolean;
-  canDelete: boolean; canAddNote: boolean; canAttach: boolean; customFields: IssueFieldValue[];
+  canDelete: boolean; canAddNote: boolean; canAttach: boolean; customFields: IssueFieldValue[]; timeMinutes: number;
 }
 export type IssueForm = Partial<{
   projectId: number; categoryId: number | null; summary: string; description: string; stepsToReproduce: string;
@@ -29,7 +29,7 @@ export type IssueForm = Partial<{
   targetVersion: string; build: string; viewState: number; sticky: boolean; tags: string[];
   customFields: Record<number, string>;
 }>;
-export interface NoteView { id: number; reporter: UserRef; text: string; viewState: number; noteType: number;
+export interface NoteView { id: number; reporter: UserRef; text: string; viewState: number; noteType: number; timeMinutes: number;
   dateSubmitted: string; lastModified: string; canEdit: boolean; }
 export interface AttachmentView { id: number; title: string; filename: string; filesize: number; fileType: string;
   dateAdded: string; canDelete: boolean; }
@@ -58,6 +58,10 @@ export const CF_TYPES = [
 ];
 export interface BulkFailure { issueId: number; message: string; }
 export interface BulkResult { succeeded: number; failures: BulkFailure[]; }
+export interface AppConfig { timeTracking: boolean; }
+export interface TimeEntry { issueId: number; summary: string; projectName: string; user: UserRef; date: string; minutes: number; note: string; }
+export interface TimeUserTotal { user: UserRef; minutes: number; }
+export interface TimeReport { entries: TimeEntry[]; byUser: TimeUserTotal[]; totalMinutes: number; }
 export type Meta = Record<string, Record<string, string>>;
 
 export interface IssueQuery {
