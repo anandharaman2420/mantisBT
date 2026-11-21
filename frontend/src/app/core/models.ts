@@ -1,6 +1,6 @@
 export interface UserRef { id: number; username: string; realname: string; }
 export interface UserView { id: number; username: string; realname: string; email: string; accessLevel: number;
-  enabled: boolean; protectedUser: boolean; dateCreated: string; lastVisit: string | null; }
+  enabled: boolean; protectedUser: boolean; dateCreated: string; lastVisit: string | null; emailEnabled: boolean; }
 export interface LoginResponse { token: string; user: UserView; }
 export interface ProjectView { id: number; name: string; status: number; enabled: boolean; viewState: number;
   description: string; myAccess: number; }

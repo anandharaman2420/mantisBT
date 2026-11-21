@@ -46,6 +46,13 @@ public class AuthController {
     @GetMapping("/me")
     public UserView me() { return Mapper.user(current.get()); }
 
+    @PutMapping("/preferences")
+    public UserView preferences(@RequestBody Preferences p) {
+        User u = current.get();
+        if (p.emailEnabled() != null) u.setEmailEnabled(p.emailEnabled());
+        return Mapper.user(u);
+    }
+
     @PostMapping("/change-password")
     public Map<String, String> changePassword(@Valid @RequestBody ChangePassword r) {
         User u = current.get();

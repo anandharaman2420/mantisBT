@@ -20,4 +20,6 @@ public class User {
     @Column(name = "protected") private boolean protectedUser = false;
     @Column(name = "access_level") private int accessLevel = 25;
     @Column(name = "login_count") private int loginCount = 0;
+    /** e-mail notifications on/off (default true also for rows that already exist) */
+    @Column(name = "email_enabled", columnDefinition = "boolean default true") private boolean emailEnabled = true;
 }

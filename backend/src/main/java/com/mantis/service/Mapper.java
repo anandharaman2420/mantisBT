@@ -13,7 +13,7 @@ public final class Mapper {
 
     public static UserView user(User u) {
         return new UserView(u.getId(), u.getUsername(), u.getRealname(), u.getEmail(), u.getAccessLevel(),
-                u.isEnabled(), u.isProtectedUser(), u.getDateCreated(), u.getLastVisit());
+                u.isEnabled(), u.isProtectedUser(), u.getDateCreated(), u.getLastVisit(), u.isEmailEnabled());
     }
 
     public static ProjectView project(Project p, int myAccess) {

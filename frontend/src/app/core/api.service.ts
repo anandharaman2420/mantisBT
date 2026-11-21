@@ -15,6 +15,7 @@ export class ApiService {
   changePassword(currentPassword: string, newPassword: string) {
     return this.http.post<{ message: string }>(`${this.base}/auth/change-password`, { currentPassword, newPassword });
   }
+  setPreferences(emailEnabled: boolean) { return this.http.put<M.UserView>(`${this.base}/auth/preferences`, { emailEnabled }); }
   meta() { return this.http.get<M.Meta>(`${this.base}/meta`); }
 
   // projects

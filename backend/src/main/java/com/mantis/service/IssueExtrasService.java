@@ -29,14 +29,15 @@ public class IssueExtrasService {
     private final CategoryRepository categories;
     private final AccessService access;
     private final HistoryService history;
+    private final NotificationService notifier;
 
     public IssueExtrasService(IssueService issueService, IssueRepository issues, NoteRepository notes,
                               AttachmentRepository attachments, HistoryRepository historyRepo, MonitorRepository monitors,
                               RelationshipRepository relationships, UserRepository users, CategoryRepository categories,
-                              AccessService access, HistoryService history) {
+                              AccessService access, HistoryService history, NotificationService notifier) {
         this.issueService = issueService; this.issues = issues; this.notes = notes; this.attachments = attachments;
         this.historyRepo = historyRepo; this.monitors = monitors; this.relationships = relationships;
-        this.users = users; this.categories = categories; this.access = access; this.history = history;
+        this.users = users; this.categories = categories; this.access = access; this.history = history; this.notifier = notifier;
     }
 
     private ResponseStatusException denied() { return new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"); }
@@ -72,6 +73,7 @@ public class IssueExtrasService {
         notes.save(n);
         history.log(me, i, "", null, n.getId(), Lookups.H_NOTE_ADDED);
         i.setLastUpdated(Instant.now());
+        notifier.noteAdded(me, i, n);
         return noteView(n, true);
     }
 

@@ -10,7 +10,9 @@ public final class Dtos {
 
     public record UserRef(Long id, String username, String realname) {}
     public record UserView(Long id, String username, String realname, String email, int accessLevel,
-                           boolean enabled, boolean protectedUser, Instant dateCreated, Instant lastVisit) {}
+                           boolean enabled, boolean protectedUser, Instant dateCreated, Instant lastVisit,
+                           boolean emailEnabled) {}
+    public record Preferences(Boolean emailEnabled) {}
     public record UserForm(@NotBlank @Size(max = 191) String username, String realname, @Email String email,
                            String password, Integer accessLevel, Boolean enabled) {}
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {}

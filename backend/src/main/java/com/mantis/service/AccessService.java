@@ -54,6 +54,17 @@ public class AccessService {
         return out;
     }
 
+    /** project visible + (private issues only for reporter, handler or developer+) */
+    public boolean canSee(User me, Issue i) {
+        int lvl = levelIn(me, i.getProject());
+        if (lvl < Lookups.VIEWER) return false;
+        if (i.getViewState() == Lookups.VS_PRIVATE) {
+            return lvl >= Lookups.DEVELOPER || i.getReporter().getId().equals(me.getId())
+                    || (i.getHandler() != null && i.getHandler().getId().equals(me.getId()));
+        }
+        return true;
+    }
+
     public Project projectOrThrow(Long id) {
         return projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
     }

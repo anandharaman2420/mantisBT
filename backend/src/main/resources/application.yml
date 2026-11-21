@@ -13,6 +13,14 @@ spring:
     properties:
       hibernate:
         format_sql: false
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:25}
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_STARTTLS:false}
   servlet:
     multipart:
       max-file-size: 5MB
@@ -22,6 +30,10 @@ app:
   jwt:
     secret: ${JWT_SECRET:change-this-secret-change-this-secret-change-this-123456}
     expiry-minutes: 480
+  base-url: ${APP_BASE_URL:http://localhost:4200}     # used for the links inside e-mails
+  mail:
+    enabled: ${MAIL_ENABLED:false}                    # set MAIL_ENABLED=true once SMTP is configured
+    from: ${MAIL_FROM:mantis@localhost}
   cors-origins: ${CORS_ORIGINS:http://localhost:4200}
   # default admin created on first start (same defaults as MantisBT: administrator / root)
   seed:

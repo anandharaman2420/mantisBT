@@ -36,14 +36,15 @@ public class IssueService {
     private final RelationshipRepository relationships;
     private final AccessService access;
     private final HistoryService history;
+    private final NotificationService notifier;
 
     public IssueService(IssueRepository issues, CategoryRepository categories, UserRepository users, TagRepository tags,
                         NoteRepository notes, AttachmentRepository attachments, HistoryRepository historyRepo,
                         MonitorRepository monitors, RelationshipRepository relationships, AccessService access,
-                        HistoryService history) {
+                        HistoryService history, NotificationService notifier) {
         this.issues = issues; this.categories = categories; this.users = users; this.tags = tags;
         this.notes = notes; this.attachments = attachments; this.historyRepo = historyRepo; this.monitors = monitors;
-        this.relationships = relationships; this.access = access; this.history = history;
+        this.relationships = relationships; this.access = access; this.history = history; this.notifier = notifier;
     }
 
     // ------------------------------------------------------------------ errors
@@ -52,15 +53,7 @@ public class IssueService {
     static ResponseStatusException notFound() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "Issue not found"); }
 
     // ------------------------------------------------------------------ visibility
-    public boolean canSee(User me, Issue i) {
-        int lvl = access.levelIn(me, i.getProject());
-        if (lvl < Lookups.VIEWER) return false;
-        if (i.getViewState() == Lookups.VS_PRIVATE) {
-            return lvl >= Lookups.DEVELOPER || i.getReporter().getId().equals(me.getId())
-                    || (i.getHandler() != null && i.getHandler().getId().equals(me.getId()));
-        }
-        return true;
-    }
+    public boolean canSee(User me, Issue i) { return access.canSee(me, i); }
 
     /** 404 (not 403) for invisible issues so that ids cannot be probed. */
     public Issue getVisible(User me, Long id) {
@@ -190,11 +183,23 @@ public class IssueService {
         issues.save(i);
         history.log(me, i, "", null, null, Lookups.H_NEW_BUG);
         if (f.tags() != null) syncTags(me, i, f.tags(), false);
+        notifier.issueCreated(me, i);
         return i;
     }
 
     // ------------------------------------------------------------------ update (bug_update.php)
     public Issue update(User me, Long id, IssueForm f) {
+        history.begin();
+        try {
+            Issue i = doUpdate(me, id, f);
+            notifier.issueUpdated(me, i, history.changes(), null);
+            return i;
+        } finally {
+            history.end();
+        }
+    }
+
+    private Issue doUpdate(User me, Long id, IssueForm f) {
         Issue i = getVisible(me, id);
         Project p = i.getProject();
         int lvl = access.require(me, p, Lookups.UPDATER);
@@ -270,6 +275,17 @@ public class IssueService {
 
     /** bug_api "change status" + assign: status, resolution, handler rules in one place. */
     public Issue changeStatus(User me, Long id, StatusChange c) {
+        history.begin();
+        try {
+            Issue i = doChangeStatus(me, id, c);
+            notifier.issueUpdated(me, i, history.changes(), c.note());
+            return i;
+        } finally {
+            history.end();
+        }
+    }
+
+    private Issue doChangeStatus(User me, Long id, StatusChange c) {
         Issue i = getVisible(me, id);
         int lvl = access.require(me, i.getProject(), Lookups.DEVELOPER);
         if (c.duplicateId() != null) {
