@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/mantis}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:root}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update          # tables are created / altered automatically at startup
+    properties:
+      hibernate:
+        format_sql: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-secret-change-this-secret-change-this-123456}
+    expiry-minutes: 480
+  cors-origins: ${CORS_ORIGINS:http://localhost:4200}
+  # default admin created on first start (same defaults as MantisBT: administrator / root)
+  seed:
+    admin-username: administrator
+    admin-password: root
+    admin-email: root@localhost

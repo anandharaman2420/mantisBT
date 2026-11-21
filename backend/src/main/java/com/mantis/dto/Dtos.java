@@ -1,0 +1,87 @@
+package com.mantis.dto;
+
+import jakarta.validation.constraints.*;
+import java.time.Instant;
+import java.util.List;
+
+/** All request / response shapes of the REST API. */
+public final class Dtos {
+    private Dtos() {}
+
+    public record UserRef(Long id, String username, String realname) {}
+    public record UserView(Long id, String username, String realname, String email, int accessLevel,
+                           boolean enabled, boolean protectedUser, Instant dateCreated, Instant lastVisit) {}
+    public record UserForm(@NotBlank @Size(max = 191) String username, String realname, @Email String email,
+                           String password, Integer accessLevel, Boolean enabled) {}
+    public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
+    public record LoginResponse(String token, UserView user) {}
+    public record ChangePassword(@NotBlank String currentPassword, @NotBlank @Size(min = 6) String newPassword) {}
+
+    public record ProjectView(Long id, String name, int status, boolean enabled, int viewState,
+                              String description, int myAccess) {}
+    public record ProjectForm(@NotBlank @Size(max = 128) String name, Integer status, Boolean enabled,
+                              Integer viewState, String description) {}
+    public record CategoryView(Long id, String name, Long defaultHandlerId, String defaultHandlerName) {}
+    public record CategoryForm(@NotBlank @Size(max = 128) String name, Long defaultHandlerId) {}
+    public record VersionView(Long id, String version, String description, boolean released, boolean obsolete,
+                              Instant dateOrder) {}
+    public record VersionForm(@NotBlank @Size(max = 64) String version, String description,
+                              Boolean released, Boolean obsolete) {}
+    public record MemberView(Long userId, String username, String realname, int accessLevel) {}
+    public record MemberForm(@NotNull Long userId, @NotNull Integer accessLevel) {}
+    public record TagView(Long id, String name, String description) {}
+    public record TagForm(@NotBlank @Size(max = 100) String name, String description) {}
+
+    public record IssueSummary(Long id, Long projectId, String projectName, String summary, int status,
+                               int resolution, int priority, int severity, UserRef reporter, UserRef handler,
+                               String category, Instant dateSubmitted, Instant lastUpdated, int viewState,
+                               boolean sticky) {}
+
+    public record RelationshipView(Long id, int type, String typeLabel, Long otherIssueId, String otherSummary,
+                                   int otherStatus) {}
+
+    public record IssueView(Long id, Long projectId, String projectName, Long categoryId, String category,
+                            String summary, String description, String stepsToReproduce, String additionalInformation,
+                            int status, int resolution, int priority, int severity, int reproducibility,
+                            int projection, int eta, UserRef reporter, UserRef handler, Long duplicateId,
+                            String os, String osBuild, String platform, String version, String fixedInVersion,
+                            String targetVersion, String build, int viewState, boolean sticky,
+                            Instant dateSubmitted, Instant lastUpdated, List<String> tags, List<UserRef> monitors,
+                            boolean monitoring, boolean canUpdate, boolean canChangeStatus, boolean canDelete,
+                            boolean canAddNote, boolean canAttach) {}
+
+    /** Used for create (nulls -> defaults) and update (nulls -> unchanged). */
+    public record IssueForm(Long projectId, Long categoryId, @Size(max = 128) String summary, String description,
+                            String stepsToReproduce, String additionalInformation, Integer priority,
+                            Integer severity, Integer reproducibility, Integer status, Integer resolution,
+                            Integer projection, Integer eta, Long handlerId, Boolean clearHandler, Long duplicateId,
+                            String os, String osBuild, String platform, String version, String fixedInVersion,
+                            String targetVersion, String build, Integer viewState, Boolean sticky,
+                            List<String> tags) {}
+
+    public record StatusChange(@NotNull Integer status, Integer resolution, Long handlerId, Long duplicateId,
+                               String note) {}
+
+    public record NoteView(Long id, UserRef reporter, String text, int viewState, int noteType,
+                           Instant dateSubmitted, Instant lastModified, boolean canEdit) {}
+    public record NoteForm(@NotBlank String text, Integer viewState, Integer noteType) {}
+
+    public record AttachmentView(Long id, String title, String filename, Long filesize, String fileType,
+                                 Instant dateAdded, boolean canDelete) {}
+
+    public record HistoryView(Long id, UserRef user, String field, String oldValue, String newValue, int type,
+                              Instant date) {}
+
+    public record RelationshipForm(@NotNull Integer type, @NotNull Long otherIssueId) {}
+    public record MonitorForm(Long userId) {}
+
+    public record NewsView(Long id, Long projectId, UserRef poster, String headline, String body, int viewState,
+                           boolean announcement, Instant datePosted) {}
+    public record NewsForm(Long projectId, @NotBlank @Size(max = 64) String headline, @NotBlank String body,
+                           Integer viewState, Boolean announcement) {}
+
+    public record PageResult<T>(List<T> items, long total, int page, int size) {}
+    public record CountEntry(int key, String label, long count) {}
+    public record SummaryView(long total, List<CountEntry> byStatus, List<CountEntry> byPriority,
+                              List<CountEntry> bySeverity, long unassigned, long open) {}
+}
