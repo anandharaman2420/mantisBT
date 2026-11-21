@@ -5,10 +5,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
+import { BulkBarComponent } from '../shared/bulk-bar.component';
 import { CategoryView, FilterCriteria, IssueQuery, IssueSummary, SavedFilterView, UserRef } from '../core/models';
 
 @Component({
-  selector: 'app-issue-list', standalone: true, imports: [FormsModule, RouterLink, DatePipe],
+  selector: 'app-issue-list', standalone: true, imports: [FormsModule, RouterLink, DatePipe, BulkBarComponent],
   template: `
   <h1>View Issues <span class="muted">({{ total }})</span></h1>
   <div class="panel">
@@ -62,9 +63,14 @@ import { CategoryView, FilterCriteria, IssueQuery, IssueSummary, SavedFilterView
     </div>
   </div>
   @if (error) { <div class="err">{{ error }}</div> }
+  @if (selectedIds.length) {
+    <app-bulk-bar [ids]="selectedIds" [projectId]="auth.projectId()" [categories]="categories" [handlers]="handlers"
+                  (done)="load()" (cleared)="selectedIds = []" />
+  }
   <div class="panel" style="padding:0;overflow:auto">
     <table>
       <thead><tr>
+        <th style="width:28px"><input type="checkbox" [checked]="allSelected()" (change)="toggleAll()" title="select all on this page"></th>
         <th class="sortable" (click)="sort('id')">ID{{ arrow('id') }}</th>
         @if (!auth.projectId()) { <th>Project</th> }
         <th>Category</th>
@@ -78,6 +84,7 @@ import { CategoryView, FilterCriteria, IssueQuery, IssueSummary, SavedFilterView
       <tbody>
         @for (i of items; track i.id) {
           <tr class="clickable" [routerLink]="['/issues', i.id]">
+            <td (click)="$event.stopPropagation()"><input type="checkbox" [checked]="isSel(i.id)" (change)="toggle(i.id)"></td>
             <td class="nowrap"><a [routerLink]="['/issues', i.id]">{{ i.id.toString().padStart(7, '0') }}</a> @if (i.viewState === 50) { 🔒 }</td>
             @if (!auth.projectId()) { <td>{{ i.projectName }}</td> }
             <td>{{ i.category }}</td>
@@ -88,7 +95,7 @@ import { CategoryView, FilterCriteria, IssueQuery, IssueSummary, SavedFilterView
             <td>{{ i.summary }}</td>
             <td>{{ i.handler?.username }}</td>
           </tr>
-        } @empty { <tr><td colspan="9" class="muted">No issues match the filter.</td></tr> }
+        } @empty { <tr><td colspan="10" class="muted">No issues match the filter.</td></tr> }
       </tbody>
     </table>
   </div>
@@ -115,6 +122,12 @@ export class IssueListComponent {
   newFilterName = '';
   newFilterPublic = false;
   exporting = false;
+  /** ids ticked in the first column (bulk actions) */
+  selectedIds: number[] = [];
+  isSel(id: number) { return this.selectedIds.includes(id); }
+  toggle(id: number) { this.selectedIds = this.isSel(id) ? this.selectedIds.filter(x => x !== id) : [...this.selectedIds, id]; }
+  allSelected() { return this.items.length > 0 && this.items.every(i => this.isSel(i.id)); }
+  toggleAll() { this.selectedIds = this.allSelected() ? [] : this.items.map(i => i.id); }
 
   get pages() { return Math.max(1, Math.ceil(this.total / this.size)); }
 
@@ -262,7 +275,7 @@ export class IssueListComponent {
       priority: this.priority, severity: this.severity, categoryId: this.categoryId, q: this.q,
       hideClosed: this.hideClosed, sortBy: this.sortBy, dir: this.dir, page: this.page, size: this.size
     }).subscribe({
-      next: r => { this.items = r.items; this.total = r.total; this.error = ''; }, error: e => this.error = errMsg(e)
+      next: r => { this.items = r.items; this.total = r.total; this.error = ''; this.selectedIds = []; }, error: e => this.error = errMsg(e)
     });
   }
   reload() { this.page = 0; this.load(); }

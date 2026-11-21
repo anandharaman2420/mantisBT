@@ -104,6 +104,13 @@ export class ApiService {
   addRelationship(id: number, type: number, otherIssueId: number) { return this.http.post<M.RelationshipView>(`${this.base}/issues/${id}/relationships`, { type, otherIssueId }); }
   deleteRelationship(relId: number) { return this.http.delete<void>(`${this.base}/relationships/${relId}`); }
 
+  // bulk / move / copy
+  bulk(req: any) { return this.http.post<M.BulkResult>(`${this.base}/issues/bulk`, req); }
+  moveIssue(id: number, projectId: number) { return this.http.post<M.IssueView>(`${this.base}/issues/${id}/move`, { projectId }); }
+  copyIssue(id: number, body: { projectId: number | null; copyNotes: boolean; copyAttachments: boolean; linkToOriginal: boolean }) {
+    return this.http.post<M.IssueView>(`${this.base}/issues/${id}/copy`, body);
+  }
+
   // custom fields
   customFields() { return this.http.get<M.CustomFieldView[]>(`${this.base}/custom-fields`); }
   createCustomField(f: any) { return this.http.post<M.CustomFieldView>(`${this.base}/custom-fields`, f); }

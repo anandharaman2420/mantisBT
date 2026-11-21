@@ -56,6 +56,8 @@ export const CF_TYPES = [
   { value: 3, label: 'Enumeration (select)' }, { value: 6, label: 'List' }, { value: 9, label: 'Radio' },
   { value: 5, label: 'Checkbox (multiple)' }, { value: 7, label: 'Multi-select list' }
 ];
+export interface BulkFailure { issueId: number; message: string; }
+export interface BulkResult { succeeded: number; failures: BulkFailure[]; }
 export type Meta = Record<string, Record<string, string>>;
 
 export interface IssueQuery {

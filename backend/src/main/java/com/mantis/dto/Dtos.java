@@ -97,6 +97,15 @@ public final class Dtos {
     public record IssueFieldValue(Long fieldId, String name, int type, String value, List<String> options,
                                   boolean required, boolean canEdit) {}
 
+    public record MoveForm(@NotNull Long projectId) {}
+    public record CopyForm(Long projectId, Boolean copyNotes, Boolean copyAttachments, Boolean linkToOriginal) {}
+    /** action: assign | status | priority | severity | view_state | category | fixed_in_version | target_version |
+     *  sticky | add_note | add_tags | remove_tags | delete | move | copy */
+    public record BulkRequest(@NotEmpty @Size(max = 200) List<Long> ids, @NotBlank String action, Integer intValue,
+                              Long longValue, String text, Integer resolution) {}
+    public record BulkFailure(Long issueId, String message) {}
+    public record BulkResult(int succeeded, List<BulkFailure> failures) {}
+
     public record PageResult<T>(List<T> items, long total, int page, int size) {}
     public record CountEntry(int key, String label, long count) {}
     public record SummaryView(long total, List<CountEntry> byStatus, List<CountEntry> byPriority,

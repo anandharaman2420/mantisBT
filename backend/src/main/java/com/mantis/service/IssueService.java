@@ -367,6 +367,108 @@ public class IssueService {
         }
     }
 
+    // ------------------------------------------------------------------ move / copy (bug_move / bug_copy)
+    /** Moves an issue to another project: category is mapped by name, handler is dropped if not a developer there. */
+    public Issue move(User me, Long id, Long targetProjectId) {
+        history.begin();
+        try {
+            Issue i = getVisible(me, id);
+            Project from = i.getProject();
+            Project to = access.projectOrThrow(targetProjectId);
+            if (from.getId().equals(to.getId())) throw bad("The issue is already in this project");
+            int lvl = access.require(me, from, Lookups.DEVELOPER);
+            access.require(me, to, Lookups.REPORTER);
+            if (i.getStatus() >= Lookups.RESOLVED && lvl < Lookups.MANAGER)
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Issue is read-only (resolved/closed)");
+
+            history.log(me, i, "project_id", from.getId(), to.getId());
+            i.setProject(to);
+
+            Category oldCat = i.getCategory();
+            if (oldCat != null) {
+                Category mapped = categoryByName(to, oldCat.getName());
+                history.log(me, i, "category_id", oldCat.getId(), mapped == null ? null : mapped.getId());
+                i.setCategory(mapped);
+            }
+            if (i.getHandler() != null && access.levelIn(i.getHandler(), to) < Lookups.DEVELOPER) {
+                history.log(me, i, "handler_id", i.getHandler().getId(), null);
+                i.setHandler(null);
+                if (i.getStatus() == Lookups.ASSIGNED) {
+                    history.log(me, i, "status", Lookups.ASSIGNED, Lookups.NEW);
+                    i.setStatus(Lookups.NEW);
+                }
+            }
+            customFields.afterMove(i, to);
+            i.setLastUpdated(Instant.now());
+            issues.save(i);
+            notifier.issueUpdated(me, i, history.changes(), null);
+            return i;
+        } finally {
+            history.end();
+        }
+    }
+
+    /** Clones an issue (new id, you are the reporter, status "new", unassigned). Returns the new issue. */
+    public Issue copy(User me, Long id, CopyForm f) {
+        Issue src = getVisible(me, id);
+        Project to = f.projectId() == null ? src.getProject() : access.projectOrThrow(f.projectId());
+        access.require(me, to, Lookups.REPORTER);
+        boolean sameProject = to.getId().equals(src.getProject().getId());
+
+        Issue n = new Issue();
+        n.setProject(to);
+        n.setReporter(me);
+        n.setSummary(src.getSummary());
+        n.setDescription(src.getDescription());
+        n.setStepsToReproduce(src.getStepsToReproduce());
+        n.setAdditionalInformation(src.getAdditionalInformation());
+        n.setPriority(src.getPriority()); n.setSeverity(src.getSeverity()); n.setReproducibility(src.getReproducibility());
+        n.setProjection(src.getProjection()); n.setEta(src.getEta());
+        n.setOs(src.getOs()); n.setOsBuild(src.getOsBuild()); n.setPlatform(src.getPlatform());
+        n.setViewState(src.getViewState());
+        if (sameProject) { n.setVersion(src.getVersion()); n.setBuild(src.getBuild()); n.setTargetVersion(src.getTargetVersion()); }
+        if (src.getCategory() != null) n.setCategory(categoryByName(to, src.getCategory().getName()));
+        n.getTags().addAll(src.getTags());
+        issues.save(n);
+        history.log(me, n, "", null, null, Lookups.H_NEW_BUG);
+        customFields.copyValues(src, n, to);
+
+        int srcLvl = access.levelIn(me, src.getProject());
+        if (Boolean.TRUE.equals(f.copyNotes())) {
+            for (Note o : notes.findByIssueIdOrderByDateSubmittedAsc(src.getId())) {
+                boolean own = o.getReporter().getId().equals(me.getId());
+                if (o.getViewState() == Lookups.VS_PRIVATE && srcLvl < Lookups.DEVELOPER && !own) continue;
+                Note c = new Note();
+                c.setIssue(n); c.setReporter(o.getReporter()); c.setText(o.getText()); c.setViewState(o.getViewState());
+                c.setNoteType(o.getNoteType()); c.setDateSubmitted(o.getDateSubmitted()); c.setLastModified(o.getLastModified());
+                notes.save(c);
+            }
+        }
+        if (Boolean.TRUE.equals(f.copyAttachments())) {
+            for (Attachment o : attachments.findByIssueId(src.getId())) {
+                Attachment c = new Attachment();
+                c.setIssue(n); c.setUser(o.getUser()); c.setTitle(o.getTitle()); c.setDescription(o.getDescription());
+                c.setFilename(o.getFilename()); c.setFilesize(o.getFilesize()); c.setFileType(o.getFileType());
+                c.setDateAdded(o.getDateAdded()); c.setContent(o.getContent());
+                attachments.save(c);
+            }
+        }
+        if (f.linkToOriginal() == null || f.linkToOriginal()) {
+            IssueRelationship r = new IssueRelationship();
+            r.setSource(n); r.setDestination(src); r.setRelationshipType(1);     // related to
+            relationships.save(r);
+            history.log(me, n, "", null, src.getId() + ":" + Lookups.label(Lookups.RELATIONSHIP, 1), Lookups.H_REL_ADDED);
+            history.log(me, src, "", null, n.getId() + ":" + Lookups.label(Lookups.RELATIONSHIP, 1), Lookups.H_REL_ADDED);
+        }
+        notifier.issueCreated(me, n);
+        return n;
+    }
+
+    private Category categoryByName(Project p, String name) {
+        return categories.findByProjectIdOrderByName(p.getId()).stream()
+                .filter(c -> c.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
+    }
+
     // ------------------------------------------------------------------ delete
     public void delete(User me, Long id) {
         Issue i = getVisible(me, id);

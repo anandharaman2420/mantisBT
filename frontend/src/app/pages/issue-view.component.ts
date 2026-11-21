@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, inject } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -17,9 +17,25 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
       <div class="row">
         @if (i.canUpdate) { <a [routerLink]="['/issues', i.id, 'edit']"><button>Edit</button></a> }
         <button (click)="toggleMonitor()">{{ i.monitoring ? 'Unmonitor' : 'Monitor' }}</button>
+        @if (i.canChangeStatus) { <button (click)="toggleTransfer()">Move / Copy…</button> }
         @if (i.canDelete) { <button class="danger" (click)="remove()">Delete</button> }
       </div>
     </div>
+
+    @if (showTransfer) {
+      <div class="panel" style="background:#ebf8ff;border-color:#bee3f8"><h2>Move or copy this issue</h2>
+        <div class="row" style="align-items:flex-end">
+          <div><label>Target project</label><select [(ngModel)]="targetProject"><option [ngValue]="null">– select –</option>
+            @for (p of transferProjects(); track p.id) { <option [ngValue]="p.id">{{ p.name }}{{ p.id === i.projectId ? ' (this project)' : '' }}</option> }</select></div>
+          <div><label>&nbsp;</label><button (click)="doMove()" [disabled]="!targetProject || targetProject === i.projectId">Move</button></div>
+          <div><label>&nbsp;</label><button class="primary" (click)="doCopy()" [disabled]="!targetProject">Copy</button></div>
+          <label style="display:flex;gap:5px;align-items:center;font-weight:400"><input type="checkbox" [(ngModel)]="copyNotes"> copy notes</label>
+          <label style="display:flex;gap:5px;align-items:center;font-weight:400"><input type="checkbox" [(ngModel)]="copyFiles"> copy files</label>
+          <label style="display:flex;gap:5px;align-items:center;font-weight:400"><input type="checkbox" [(ngModel)]="linkOriginal"> link to original</label>
+        </div>
+        <p class="muted" style="margin:8px 0 0">Move keeps the issue number and history; the category is matched by name, the assignee is removed if not a developer in the target project, custom fields not used there are dropped.</p>
+      </div>
+    }
 
     <div class="panel">
       <div class="grid2">
@@ -130,7 +146,7 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
     </div>
   }`
 })
-export class IssueViewComponent implements OnInit {
+export class IssueViewComponent implements OnInit, OnChanges {
   @Input() id!: string;
   auth = inject(AuthService);
   private api = inject(ApiService);
@@ -144,7 +160,27 @@ export class IssueViewComponent implements OnInit {
   relType = 1; relOther: number | null = null;
   st: any = { status: 10, resolution: null, handlerId: null, duplicateId: null, note: '' };
 
+  showTransfer = false; targetProject: number | null = null;
+  copyNotes = false; copyFiles = false; linkOriginal = true;
   ngOnInit() { this.load(); }
+  /** the router re-uses this component when only :id changes (copy, relationship links) -> reload */
+  ngOnChanges(c: SimpleChanges) {
+    if (c['id'] && !c['id'].firstChange) {
+      this.i = null; this.error = ''; this.showTransfer = false; this.handlers = []; this.hist = [];
+      this.load();
+    }
+  }
+
+  toggleTransfer() { this.showTransfer = !this.showTransfer; this.targetProject = null; }
+  transferProjects() { return this.auth.projects().filter(p => p.myAccess >= 25); }
+  doMove() {
+    if (!confirm('Move this issue to the selected project?')) return;
+    this.api.moveIssue(this.i!.id, this.targetProject!).subscribe({ next: () => { this.showTransfer = false; this.error = ''; this.load(); }, error: this.fail });
+  }
+  doCopy() {
+    this.api.copyIssue(this.i!.id, { projectId: this.targetProject, copyNotes: this.copyNotes, copyAttachments: this.copyFiles, linkToOriginal: this.linkOriginal })
+      .subscribe({ next: n => { this.showTransfer = false; this.router.navigate(['/issues', n.id]); }, error: this.fail });
+  }
 
   isDev() { return this.i?.canChangeStatus ?? false; }
   monitorNames() { return this.i!.monitors.map(m => m.username).join(', '); }

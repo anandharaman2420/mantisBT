@@ -25,5 +25,8 @@ public interface AttachmentRepository extends JpaRepository<Attachment, Long> {
            "from Attachment a where a.issue.id = :issueId order by a.id")
     List<Meta> findMeta(@Param("issueId") Long issueId);
 
+    /** full entities INCLUDING the file bytes - only for copying issues */
+    List<Attachment> findByIssueId(Long issueId);
+
     void deleteByIssueId(Long issueId);
 }

@@ -2,6 +2,7 @@ package com.mantis.service;
 
 import com.mantis.domain.*;
 import com.mantis.repo.MonitorRepository;
+import com.mantis.repo.ProjectRepository;
 import com.mantis.repo.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,13 +22,14 @@ public class NotificationService {
     private final UserRepository users;
     private final AccessService access;
     private final MailDispatcher dispatcher;
+    private final ProjectRepository projects;
     private final boolean enabled;
     private final String baseUrl;
 
     public NotificationService(MonitorRepository monitors, UserRepository users, AccessService access,
-                               MailDispatcher dispatcher, @Value("${app.mail.enabled}") boolean enabled,
+                               MailDispatcher dispatcher, ProjectRepository projects, @Value("${app.mail.enabled}") boolean enabled,
                                @Value("${app.base-url}") String baseUrl) {
-        this.monitors = monitors; this.users = users; this.access = access; this.dispatcher = dispatcher;
+        this.monitors = monitors; this.users = users; this.access = access; this.dispatcher = dispatcher; this.projects = projects;
         this.enabled = enabled; this.baseUrl = baseUrl.replaceAll("/+$", "");
     }
 
@@ -111,6 +113,7 @@ public class NotificationService {
                 case "severity": return Lookups.label(Lookups.SEVERITY, Integer.parseInt(v));
                 case "reproducibility": return Lookups.label(Lookups.REPRODUCIBILITY, Integer.parseInt(v));
                 case "view_state": return Lookups.label(Lookups.VIEW_STATE, Integer.parseInt(v));
+                case "project_id": return projects.findById(Long.parseLong(v)).map(Project::getName).orElse("#" + v);
                 case "handler_id": return users.findById(Long.parseLong(v)).map(User::getUsername).orElse("#" + v);
                 default: return v;
             }

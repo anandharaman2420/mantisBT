@@ -76,6 +76,26 @@ public class CustomFieldService {
         return out;
     }
 
+    /** after an issue moved to another project: drop values of fields that project does not use */
+    public void afterMove(Issue i, Project to) {
+        Set<Long> linked = links.findByProjectIdOrderBySequenceAscIdAsc(to.getId()).stream()
+                .map(l -> l.getField().getId()).collect(Collectors.toSet());
+        for (CustomFieldValue v : values.findByIssueId(i.getId()))
+            if (!linked.contains(v.getField().getId())) values.delete(v);
+    }
+
+    /** copy the values of src to dst (only for fields that the target project uses) */
+    public void copyValues(Issue src, Issue dst, Project to) {
+        Set<Long> linked = links.findByProjectIdOrderBySequenceAscIdAsc(to.getId()).stream()
+                .map(l -> l.getField().getId()).collect(Collectors.toSet());
+        for (CustomFieldValue v : values.findByIssueId(src.getId())) {
+            if (!linked.contains(v.getField().getId())) continue;
+            CustomFieldValue n = new CustomFieldValue();
+            n.setField(v.getField()); n.setIssue(dst); n.setValue(v.getValue());
+            values.save(n);
+        }
+    }
+
     // ------------------------------------------------------------------ write side
     /**
      * Validates and stores the submitted values.

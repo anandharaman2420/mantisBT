@@ -30,14 +30,16 @@ public class IssueExtrasService {
     private final AccessService access;
     private final HistoryService history;
     private final NotificationService notifier;
+    private final ProjectRepository projects;
 
     public IssueExtrasService(IssueService issueService, IssueRepository issues, NoteRepository notes,
                               AttachmentRepository attachments, HistoryRepository historyRepo, MonitorRepository monitors,
                               RelationshipRepository relationships, UserRepository users, CategoryRepository categories,
-                              AccessService access, HistoryService history, NotificationService notifier) {
+                              AccessService access, HistoryService history, NotificationService notifier,
+                              ProjectRepository projects) {
         this.issueService = issueService; this.issues = issues; this.notes = notes; this.attachments = attachments;
         this.historyRepo = historyRepo; this.monitors = monitors; this.relationships = relationships;
-        this.users = users; this.categories = categories; this.access = access; this.history = history; this.notifier = notifier;
+        this.users = users; this.categories = categories; this.access = access; this.history = history; this.notifier = notifier; this.projects = projects;
     }
 
     private ResponseStatusException denied() { return new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"); }
@@ -246,17 +248,19 @@ public class IssueExtrasService {
         issueService.getVisible(me, issueId);
         Map<Long, String> userNames = new HashMap<>();
         Map<Long, String> categoryNames = new HashMap<>();
+        Map<Long, String> projectNames = new HashMap<>();
         List<HistoryView> out = new ArrayList<>();
         for (IssueHistory h : historyRepo.findByIssueIdOrderByDateModifiedAscIdAsc(issueId)) {
             out.add(new HistoryView(h.getId(), Mapper.ref(h.getUser()), h.getFieldName(),
-                    display(h.getFieldName(), h.getOldValue(), userNames, categoryNames),
-                    display(h.getFieldName(), h.getNewValue(), userNames, categoryNames),
+                    display(h.getFieldName(), h.getOldValue(), userNames, categoryNames, projectNames),
+                    display(h.getFieldName(), h.getNewValue(), userNames, categoryNames, projectNames),
                     h.getType(), h.getDateModified()));
         }
         return out;
     }
 
-    private String display(String field, String v, Map<Long, String> userNames, Map<Long, String> catNames) {
+    private String display(String field, String v, Map<Long, String> userNames, Map<Long, String> catNames,
+                           Map<Long, String> projectNames) {
         if (v == null || field == null) return v;
         try {
             switch (field) {
@@ -271,6 +275,9 @@ public class IssueExtrasService {
                 case "handler_id":
                     return userNames.computeIfAbsent(Long.parseLong(v),
                             id -> users.findById(id).map(User::getUsername).orElse("#" + id));
+                case "project_id":
+                    return projectNames.computeIfAbsent(Long.parseLong(v),
+                            id -> projects.findById(id).map(Project::getName).orElse("#" + id));
                 case "category_id":
                     return catNames.computeIfAbsent(Long.parseLong(v),
                             id -> categories.findById(id).map(Category::getName).orElse("#" + id));
