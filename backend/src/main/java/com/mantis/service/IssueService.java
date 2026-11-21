@@ -37,14 +37,18 @@ public class IssueService {
     private final AccessService access;
     private final HistoryService history;
     private final NotificationService notifier;
+    private final CustomFieldService customFields;
+    private final CustomFieldValueRepository fieldValues;
 
     public IssueService(IssueRepository issues, CategoryRepository categories, UserRepository users, TagRepository tags,
                         NoteRepository notes, AttachmentRepository attachments, HistoryRepository historyRepo,
                         MonitorRepository monitors, RelationshipRepository relationships, AccessService access,
-                        HistoryService history, NotificationService notifier) {
+                        HistoryService history, NotificationService notifier,
+                        CustomFieldService customFields, CustomFieldValueRepository fieldValues) {
         this.issues = issues; this.categories = categories; this.users = users; this.tags = tags;
         this.notes = notes; this.attachments = attachments; this.historyRepo = historyRepo; this.monitors = monitors;
         this.relationships = relationships; this.access = access; this.history = history; this.notifier = notifier;
+        this.customFields = customFields; this.fieldValues = fieldValues;
     }
 
     // ------------------------------------------------------------------ errors
@@ -137,7 +141,8 @@ public class IssueService {
                 i.getFixedInVersion(), i.getTargetVersion(), i.getBuild(), i.getViewState(), i.isSticky(),
                 i.getDateSubmitted(), i.getLastUpdated(), tagNames, monitorRefs, monitoring,
                 canUpdate, lvl >= Lookups.DEVELOPER, lvl >= Lookups.DEVELOPER,
-                lvl >= Lookups.REPORTER && (!readonly || lvl >= Lookups.MANAGER), lvl >= Lookups.REPORTER);
+                lvl >= Lookups.REPORTER && (!readonly || lvl >= Lookups.MANAGER), lvl >= Lookups.REPORTER,
+                customFields.forIssue(i, lvl));
     }
 
     // ------------------------------------------------------------------ create (bug_report.php / bug_api bug_create)
@@ -183,6 +188,7 @@ public class IssueService {
         issues.save(i);
         history.log(me, i, "", null, null, Lookups.H_NEW_BUG);
         if (f.tags() != null) syncTags(me, i, f.tags(), false);
+        customFields.apply(me, i, f.customFields(), true, lvl);
         notifier.issueCreated(me, i);
         return i;
     }
@@ -269,6 +275,7 @@ public class IssueService {
             if (lvl < Lookups.UPDATER) throw denied();
             syncTags(me, i, f.tags(), true);
         }
+        customFields.apply(me, i, f.customFields(), false, lvl);
         i.setLastUpdated(Instant.now());
         return issues.save(i);
     }
@@ -353,6 +360,7 @@ public class IssueService {
         Issue i = getVisible(me, id);
         access.require(me, i.getProject(), Lookups.DEVELOPER);           // delete_bug_threshold
         relationships.deleteAllFor(i.getId());
+        fieldValues.deleteByIssueId(i.getId());
         notes.deleteByIssueId(i.getId());
         attachments.deleteByIssueId(i.getId());
         monitors.deleteByIssueId(i.getId());

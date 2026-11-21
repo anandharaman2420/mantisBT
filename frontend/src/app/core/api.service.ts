@@ -80,6 +80,17 @@ export class ApiService {
   addRelationship(id: number, type: number, otherIssueId: number) { return this.http.post<M.RelationshipView>(`${this.base}/issues/${id}/relationships`, { type, otherIssueId }); }
   deleteRelationship(relId: number) { return this.http.delete<void>(`${this.base}/relationships/${relId}`); }
 
+  // custom fields
+  customFields() { return this.http.get<M.CustomFieldView[]>(`${this.base}/custom-fields`); }
+  createCustomField(f: any) { return this.http.post<M.CustomFieldView>(`${this.base}/custom-fields`, f); }
+  updateCustomField(id: number, f: any) { return this.http.put<M.CustomFieldView>(`${this.base}/custom-fields/${id}`, f); }
+  deleteCustomField(id: number) { return this.http.delete<void>(`${this.base}/custom-fields/${id}`); }
+  linkedFields(pid: number) { return this.http.get<M.CustomFieldView[]>(`${this.base}/projects/${pid}/custom-field-links`); }
+  availableFields(pid: number) { return this.http.get<M.CustomFieldView[]>(`${this.base}/projects/${pid}/custom-field-links/available`); }
+  linkField(pid: number, fieldId: number) { return this.http.put<void>(`${this.base}/projects/${pid}/custom-field-links`, { fieldId }); }
+  unlinkField(pid: number, fieldId: number) { return this.http.delete<void>(`${this.base}/projects/${pid}/custom-field-links/${fieldId}`); }
+  reportFields(pid: number) { return this.http.get<M.IssueFieldValue[]>(`${this.base}/projects/${pid}/custom-fields`); }
+
   // tags / news
   tags() { return this.http.get<M.TagView[]>(`${this.base}/tags`); }
   news(projectId: number | null) { return this.http.get<M.NewsView[]>(`${this.base}/news`, { params: projectId ? { projectId } : {} }); }

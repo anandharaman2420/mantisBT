@@ -50,7 +50,7 @@ public final class Dtos {
                             String targetVersion, String build, int viewState, boolean sticky,
                             Instant dateSubmitted, Instant lastUpdated, List<String> tags, List<UserRef> monitors,
                             boolean monitoring, boolean canUpdate, boolean canChangeStatus, boolean canDelete,
-                            boolean canAddNote, boolean canAttach) {}
+                            boolean canAddNote, boolean canAttach, List<IssueFieldValue> customFields) {}
 
     /** Used for create (nulls -> defaults) and update (nulls -> unchanged). */
     public record IssueForm(Long projectId, Long categoryId, @Size(max = 128) String summary, String description,
@@ -59,7 +59,7 @@ public final class Dtos {
                             Integer projection, Integer eta, Long handlerId, Boolean clearHandler, Long duplicateId,
                             String os, String osBuild, String platform, String version, String fixedInVersion,
                             String targetVersion, String build, Integer viewState, Boolean sticky,
-                            List<String> tags) {}
+                            List<String> tags, java.util.Map<Long, String> customFields) {}
 
     public record StatusChange(@NotNull Integer status, Integer resolution, Long handlerId, Long duplicateId,
                                String note) {}
@@ -81,6 +81,20 @@ public final class Dtos {
                            boolean announcement, Instant datePosted) {}
     public record NewsForm(Long projectId, @NotBlank @Size(max = 64) String headline, @NotBlank String body,
                            Integer viewState, Boolean announcement) {}
+
+    public record CustomFieldView(Long id, String name, int type, String possibleValues, String defaultValue,
+                                  String validRegexp, int accessLevelR, int accessLevelRw, int lengthMin, int lengthMax,
+                                  boolean requireReport, boolean requireUpdate, boolean displayReport,
+                                  boolean displayUpdate, boolean displayResolved, boolean displayClosed, boolean filterBy) {}
+    public record CustomFieldForm(@NotBlank @Size(max = 64) String name, Integer type, String possibleValues,
+                                  String defaultValue, String validRegexp, Integer accessLevelR, Integer accessLevelRw,
+                                  Integer lengthMin, Integer lengthMax, Boolean requireReport, Boolean requireUpdate,
+                                  Boolean displayReport, Boolean displayUpdate, Boolean displayResolved,
+                                  Boolean displayClosed, Boolean filterBy) {}
+    public record FieldLinkForm(@NotNull Long fieldId, Integer sequence) {}
+    /** one custom field of one issue (or of the report form): definition + current value */
+    public record IssueFieldValue(Long fieldId, String name, int type, String value, List<String> options,
+                                  boolean required, boolean canEdit) {}
 
     public record PageResult<T>(List<T> items, long total, int page, int size) {}
     public record CountEntry(int key, String label, long count) {}

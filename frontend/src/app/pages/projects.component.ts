@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
-import { ACCESS, CategoryView, MemberView, NewsView, ProjectView, UserRef, VersionView } from '../core/models';
+import { ACCESS, CategoryView, CustomFieldView, MemberView, NewsView, ProjectView, UserRef, VersionView } from '../core/models';
 
 @Component({
   selector: 'app-projects', standalone: true, imports: [FormsModule, DatePipe],
@@ -74,6 +74,17 @@ import { ACCESS, CategoryView, MemberView, NewsView, ProjectView, UserRef, Versi
             <div><label>&nbsp;</label><button class="primary" (click)="setMember()" [disabled]="!memUser">Set</button></div></div>
         }
 
+        @if (tab === 'Custom fields') {
+          <p class="muted">Fields that appear on issues of this project. Define new fields under "Custom Fields" (administrator).</p>
+          <table><thead><tr><th>Field</th><th></th></tr></thead><tbody>
+            @for (f of linked; track f.id) { <tr><td>{{ f.name }}</td><td class="right"><button class="small danger" (click)="unlink(f)">remove</button></td></tr> }
+          </tbody></table>
+          <div class="row" style="margin-top:10px"><div class="grow"><label>Add existing field</label>
+            <select [(ngModel)]="linkId"><option [ngValue]="null">– select –</option>@for (f of available; track f.id) { <option [ngValue]="f.id">{{ f.name }}</option> }</select></div>
+            <div><label>&nbsp;</label><button class="primary" (click)="link()" [disabled]="!linkId">Add</button></div></div>
+          <p class="muted" style="margin-top:8px">Removing a field also deletes its values on this project's issues.</p>
+        }
+
         @if (tab === 'News') {
           @for (n of news; track n.id) {
             <div class="note"><b>{{ n.headline }}</b> <span class="muted">– {{ n.poster.username }}, {{ n.datePosted | date:'yyyy-MM-dd' }}</span>
@@ -94,11 +105,12 @@ export class ProjectsComponent {
   error = '';
   np: any = { name: '', status: 10, viewState: 10 };
   sel: ProjectView | null = null; edit: any = {};
-  tabs = ['Details', 'Categories', 'Versions', 'Members', 'News']; tab = 'Details';
+  tabs = ['Details', 'Categories', 'Versions', 'Members', 'Custom fields', 'News']; tab = 'Details';
   cats: CategoryView[] = []; vers: VersionView[] = []; mems: MemberView[] = []; news: NewsView[] = [];
   newCat = ''; newCatHandler: number | null = null; newVer = '';
   devs: UserRef[] = []; allUsers: UserRef[] = []; memUser: number | null = null; memLevel = 25;
   nn = { headline: '', body: '' };
+  linked: CustomFieldView[] = []; available: CustomFieldView[] = []; linkId: number | null = null;
 
   private fail = (e: any) => this.error = errMsg(e);
 
@@ -119,6 +131,7 @@ export class ProjectsComponent {
     if (t === 'Categories') this.api.categories(id).subscribe(c => this.cats = c);
     if (t === 'Versions') this.api.versions(id).subscribe(v => this.vers = v);
     if (t === 'Members') this.api.members(id).subscribe(m => this.mems = m);
+    if (t === 'Custom fields') { this.api.linkedFields(id).subscribe(l => this.linked = l); this.api.availableFields(id).subscribe(a => this.available = a); }
     if (t === 'News') this.api.news(id).subscribe(n => this.news = n.filter(x => x.projectId === id));
   }
   saveProject() {
@@ -139,6 +152,8 @@ export class ProjectsComponent {
   delVer(v: VersionView) { this.api.deleteVersion(v.id).subscribe({ next: () => this.setTab('Versions'), error: this.fail }); }
   setMember() { this.api.setMember(this.sel!.id, this.memUser!, this.memLevel).subscribe({ next: () => { this.error = ''; this.setTab('Members'); }, error: this.fail }); }
   delMember(m: MemberView) { this.api.removeMember(this.sel!.id, m.userId).subscribe({ next: () => this.setTab('Members'), error: this.fail }); }
+  link() { this.api.linkField(this.sel!.id, this.linkId!).subscribe({ next: () => { this.linkId = null; this.error = ''; this.setTab('Custom fields'); }, error: this.fail }); }
+  unlink(f: CustomFieldView) { if (confirm('Remove "' + f.name + '" from this project (its values on the project\'s issues are deleted)?')) this.api.unlinkField(this.sel!.id, f.id).subscribe({ next: () => this.setTab('Custom fields'), error: this.fail }); }
   addNews() { this.api.addNews({ projectId: this.sel!.id, headline: this.nn.headline, body: this.nn.body }).subscribe({ next: () => { this.nn = { headline: '', body: '' }; this.setTab('News'); }, error: this.fail }); }
   delNews(n: NewsView) { this.api.deleteNews(n.id).subscribe({ next: () => this.setTab('News'), error: this.fail }); }
 }

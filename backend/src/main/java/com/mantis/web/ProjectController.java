@@ -29,12 +29,15 @@ public class ProjectController {
     private final NewsRepository news;
     private final CurrentUser current;
     private final AccessService access;
+    private final CustomFieldProjectRepository fieldLinks;
 
     public ProjectController(ProjectRepository projects, CategoryRepository categories, VersionRepository versions,
                              ProjectUserRepository members, UserRepository users, IssueRepository issues,
-                             NewsRepository news, CurrentUser current, AccessService access) {
+                             NewsRepository news, CurrentUser current, AccessService access,
+                             CustomFieldProjectRepository fieldLinks) {
         this.projects = projects; this.categories = categories; this.versions = versions; this.members = members;
         this.users = users; this.issues = issues; this.news = news; this.current = current; this.access = access;
+        this.fieldLinks = fieldLinks;
     }
 
     private ResponseStatusException bad(String m) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, m); }
@@ -89,6 +92,7 @@ public class ProjectController {
         if (issues.countByProjectId(id) > 0) throw bad("Project still has issues. Disable it instead of deleting.");
         news.findAll().stream().filter(n -> n.getProject() != null && n.getProject().getId().equals(id)).forEach(news::delete);
         members.deleteByProjectId(id);
+        fieldLinks.deleteByProjectId(id);
         versions.deleteByProjectId(id);
         categories.deleteByProjectId(id);
         projects.delete(p);

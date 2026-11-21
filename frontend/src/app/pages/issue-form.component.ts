@@ -4,11 +4,12 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
-import { ACCESS, CategoryView, IssueForm, IssueView, TagView, UserRef, VersionView } from '../core/models';
+import { ACCESS, CategoryView, IssueFieldValue, IssueForm, IssueView, TagView, UserRef, VersionView } from '../core/models';
+import { CfInputComponent } from '../shared/cf-input.component';
 
 /** Used for both "Report Issue" (/report) and "Edit Issue" (/issues/:id/edit). */
 @Component({
-  selector: 'app-issue-form', standalone: true, imports: [FormsModule, RouterLink],
+  selector: 'app-issue-form', standalone: true, imports: [FormsModule, RouterLink, CfInputComponent],
   template: `
   <h1>{{ editing ? 'Edit Issue ' + id : 'Report Issue' }}</h1>
   @if (error) { <div class="err">{{ error }}</div> }
@@ -55,6 +56,10 @@ import { ACCESS, CategoryView, IssueForm, IssueView, TagView, UserRef, VersionVi
     <div class="m"><label>Description *</label><textarea [(ngModel)]="m.description" rows="6"></textarea></div>
     <div class="m"><label>Steps to reproduce</label><textarea [(ngModel)]="m.stepsToReproduce"></textarea></div>
     <div class="m"><label>Additional information</label><textarea [(ngModel)]="m.additionalInformation"></textarea></div>
+    @if (cfFields.length) {
+      <h2>Custom fields</h2>
+      <div class="grid2">@for (f of cfFields; track f.fieldId) { <div class="m"><app-cf-input [field]="f" [values]="cf" /></div> }</div>
+    }
     @if (editing && issue?.canChangeStatus) {
       <h2>Workflow</h2>
       <div class="row m">
@@ -83,6 +88,7 @@ export class IssueFormComponent implements OnInit {
     summary: '', description: '', stepsToReproduce: '', additionalInformation: '', platform: '', os: '', osBuild: '',
     version: '', build: '', status: 10, resolution: 10, fixedInVersion: '', targetVersion: '' };
   tagsText = '';
+  cfFields: IssueFieldValue[] = []; cf: Record<number, string> = {}; cfOriginal: Record<number, string> = {};
   categories: CategoryView[] = []; versions: VersionView[] = []; handlers: UserRef[] = []; allTags: TagView[] = [];
 
   ngOnInit() {
@@ -99,6 +105,9 @@ export class IssueFormComponent implements OnInit {
             resolution: i.resolution, fixedInVersion: i.fixedInVersion, targetVersion: i.targetVersion };
           this.tagsText = i.tags.join(', ');
           this.original = { ...this.m, tags: [...i.tags] };
+          this.cfFields = i.customFields.filter(f => f.canEdit);
+          this.cfFields.forEach(f => this.cf[f.fieldId] = f.value);
+          this.cfOriginal = { ...this.cf };
           this.loadProject();
         },
         error: e => this.error = errMsg(e)
@@ -114,12 +123,14 @@ export class IssueFormComponent implements OnInit {
   private loadProject() {
     const pid = this.m.projectId;
     this.categories = []; this.versions = []; this.handlers = [];
+    if (!this.editing) { this.cfFields = []; this.cf = {}; }
     if (!pid) return;
     this.api.categories(pid).subscribe(c => {
       this.categories = c;
       if (!this.editing && this.m.categoryId === null && c.length) this.m.categoryId = c[0].id;
     });
     this.api.versions(pid).subscribe(v => this.versions = v);
+    if (!this.editing) this.api.reportFields(pid).subscribe(fs => { this.cfFields = fs; fs.forEach(f => this.cf[f.fieldId] = f.value); });
     if (this.canAssign()) this.api.assignable(pid).subscribe(u => this.handlers = u);
   }
 
@@ -135,7 +146,7 @@ export class IssueFormComponent implements OnInit {
     const tags = this.tagsText.split(',').map(s => s.trim()).filter(Boolean);
     this.busy = true;
     if (!this.editing) {
-      const body: IssueForm = { ...this.m, tags };
+      const body: IssueForm = { ...this.m, tags, customFields: this.cf };
       if (!this.canAssign() || body.handlerId === null) delete body.handlerId;
       this.api.createIssue(body).subscribe({
         next: i => this.router.navigate(['/issues', i.id]), error: e => { this.error = errMsg(e); this.busy = false; }
@@ -147,6 +158,9 @@ export class IssueFormComponent implements OnInit {
     for (const k of Object.keys(this.m)) if (this.m[k] !== this.original[k] && k !== 'projectId') diff[k] = this.m[k];
     if ('handlerId' in diff && diff.handlerId === null) { diff.clearHandler = true; delete diff.handlerId; }
     if (JSON.stringify(tags) !== JSON.stringify(this.original.tags)) diff.tags = tags;
+    const cfDiff: Record<number, string> = {};
+    for (const k of Object.keys(this.cf)) if (this.cf[+k] !== this.cfOriginal[+k]) cfDiff[+k] = this.cf[+k];
+    if (Object.keys(cfDiff).length) diff.customFields = cfDiff;
     this.api.updateIssue(Number(this.id), diff).subscribe({
       next: i => this.router.navigate(['/issues', i.id]), error: e => { this.error = errMsg(e); this.busy = false; }
     });

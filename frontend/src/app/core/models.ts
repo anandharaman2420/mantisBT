@@ -19,7 +19,7 @@ export interface IssueView {
   os: string; osBuild: string; platform: string; version: string; fixedInVersion: string; targetVersion: string;
   build: string; viewState: number; sticky: boolean; dateSubmitted: string; lastUpdated: string;
   tags: string[]; monitors: UserRef[]; monitoring: boolean; canUpdate: boolean; canChangeStatus: boolean;
-  canDelete: boolean; canAddNote: boolean; canAttach: boolean;
+  canDelete: boolean; canAddNote: boolean; canAttach: boolean; customFields: IssueFieldValue[];
 }
 export type IssueForm = Partial<{
   projectId: number; categoryId: number | null; summary: string; description: string; stepsToReproduce: string;
@@ -27,6 +27,7 @@ export type IssueForm = Partial<{
   resolution: number; projection: number; eta: number; handlerId: number | null; clearHandler: boolean;
   duplicateId: number; os: string; osBuild: string; platform: string; version: string; fixedInVersion: string;
   targetVersion: string; build: string; viewState: number; sticky: boolean; tags: string[];
+  customFields: Record<number, string>;
 }>;
 export interface NoteView { id: number; reporter: UserRef; text: string; viewState: number; noteType: number;
   dateSubmitted: string; lastModified: string; canEdit: boolean; }
@@ -42,6 +43,19 @@ export interface PageResult<T> { items: T[]; total: number; page: number; size: 
 export interface CountEntry { key: number; label: string; count: number; }
 export interface SummaryView { total: number; byStatus: CountEntry[]; byPriority: CountEntry[]; bySeverity: CountEntry[];
   unassigned: number; open: number; }
+export interface CustomFieldView { id: number; name: string; type: number; possibleValues: string; defaultValue: string;
+  validRegexp: string; accessLevelR: number; accessLevelRw: number; lengthMin: number; lengthMax: number;
+  requireReport: boolean; requireUpdate: boolean; displayReport: boolean; displayUpdate: boolean;
+  displayResolved: boolean; displayClosed: boolean; filterBy: boolean; }
+/** one custom field of an issue (or of the report form): definition + current value */
+export interface IssueFieldValue { fieldId: number; name: string; type: number; value: string; options: string[];
+  required: boolean; canEdit: boolean; }
+export const CF_TYPES = [
+  { value: 0, label: 'String' }, { value: 10, label: 'Text area' }, { value: 1, label: 'Number (integer)' },
+  { value: 2, label: 'Number (decimal)' }, { value: 4, label: 'E-mail' }, { value: 8, label: 'Date' },
+  { value: 3, label: 'Enumeration (select)' }, { value: 6, label: 'List' }, { value: 9, label: 'Radio' },
+  { value: 5, label: 'Checkbox (multiple)' }, { value: 7, label: 'Multi-select list' }
+];
 export type Meta = Record<string, Record<string, string>>;
 
 export interface IssueQuery {

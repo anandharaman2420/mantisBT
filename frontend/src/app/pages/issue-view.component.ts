@@ -53,6 +53,12 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
       @if (i.stepsToReproduce) { <h2 style="margin-top:14px">Steps to reproduce</h2><div class="pre">{{ i.stepsToReproduce }}</div> }
       @if (i.additionalInformation) { <h2 style="margin-top:14px">Additional information</h2><div class="pre">{{ i.additionalInformation }}</div> }</div>
 
+    @if (i.customFields.length) {
+      <div class="panel"><h2>Custom fields</h2><dl class="kv">
+        @for (f of i.customFields; track f.fieldId) { <dt>{{ f.name }}</dt><dd class="pre">{{ f.value ? f.value.split('|').join(', ') : '–' }}</dd> }
+      </dl></div>
+    }
+
     <div class="panel"><h2>Attached files ({{ files.length }})</h2>
       @for (f of files; track f.id) {
         <div class="row" style="align-items:center;margin-bottom:4px">

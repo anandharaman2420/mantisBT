@@ -171,6 +171,26 @@ def main():
         hist.append((r['id'], r['bug_id'], uid(r['user_id']), s(r['field_name'], 64), s(r['old_value']) or None,
                      s(r['new_value']) or None, i(r['type']), ts(r['date_modified'], EPOCH)))
 
+    # ---- custom fields (definitions, project links, values)
+    cfields = rows('custom_field', 'id,name,type,possible_values,default_value,valid_regexp,access_level_r,access_level_rw,'
+                                    'length_min,length_max,require_report,require_update,display_report,display_update,'
+                                    'display_resolved,display_closed,filter_by')
+    cf_ids = {c['id'] for c in cfields}
+    cf_type = {c['id']: i(c['type']) for c in cfields}
+    cf_links = [r for r in rows('custom_field_project', 'field_id,project_id,sequence')
+                if r['field_id'] in cf_ids and r['project_id'] in project_ids]
+    try:
+        cf_raw = rows('custom_field_string', 'field_id,bug_id,value,text')
+    except Exception:                       # older schema without the "text" column
+        if hasattr(src, 'rollback'): src.rollback()
+        cf_raw = rows('custom_field_string', 'field_id,bug_id,value')
+    cf_values = []
+    for r in cf_raw:
+        if r['field_id'] not in cf_ids or r['bug_id'] not in bug_ids: continue
+        v = s(r.get('text')) or s(r['value'])
+        if cf_type.get(r['field_id']) in (5, 7): v = v.strip('|')        # checkbox / multi-select: "|a|b|" -> "a|b"
+        if v != '': cf_values.append((r['field_id'], r['bug_id'], v))
+
     news = [(r['id'], r['project_id'] if r['project_id'] in project_ids else None,
              r['poster_id'] if r['poster_id'] in user_ids else admin_id, ts(r['date_posted'], EPOCH),
              ts(r['last_modified'], EPOCH), i(r['view_state'], 10), b(r['announcement']), s(r['headline'], 64), s(r['body']))
@@ -185,7 +205,8 @@ def main():
                  ('categories (after copying global ones)', len(cat_rows)), ('versions', len(versions)), ('tags', len(tags)),
                  ('issues', len(issues)), ('issue-tag links', len(bug_tags)), ('notes', len(notes_out)),
                  ('monitors', len(monitors)), ('relationships', len(rels)), ('history rows', len(hist)),
-                 ('attachments', len(file_meta)), ('news', len(news))]:
+                 ('attachments', len(file_meta)), ('news', len(news)), ('custom fields', len(cfields)),
+                 ('custom field links', len(cf_links)), ('custom field values', len(cf_values))]:
         print(f'  {k:42s} {v}')
     print('  issues by status:', dict(sorted(bug_status.items())))
     if warn:
@@ -196,7 +217,7 @@ def main():
     # ---------------------------------------------------------------- write
     dst = psycopg2.connect(host=a.dst_host, port=a.dst_port, dbname=a.dst_db, user=a.dst_user, password=a.dst_password)
     dc = dst.cursor()
-    tables = ['bug_tag', 'bug_file', 'bug_history', 'bug_monitor', 'bug_relationship', 'bugnote', 'news', 'bug',
+    tables = ['custom_field_string', 'custom_field_project', 'custom_field', 'bug_tag', 'bug_file', 'bug_history', 'bug_monitor', 'bug_relationship', 'bugnote', 'news', 'bug',
               'tag', 'project_version', 'category', 'project_user_list', 'project', 'user']
     full = lambda t: f'mantis_{t}_table'
     try:
@@ -220,6 +241,19 @@ def main():
           b(u['protected']), i(u['access_level'], 25), i(u['login_count']), ts(u['last_visit']), ts(u['date_created'], EPOCH)) for u in users])
     ins('project', 'id,name,status,enabled,view_state,description',
         [(p['id'], s(p['name'], 128), i(p['status'], 10), b(p['enabled']), i(p['view_state'], 10), s(p['description'])) for p in projects])
+    seen_cf = set(); cf_rows = []
+    for c in cfields:
+        n = s(c['name'], 64)
+        if n.lower() in seen_cf: W('duplicate custom field name skipped', n); continue
+        seen_cf.add(n.lower())
+        cf_rows.append((c['id'], n, i(c['type']), s(c['possible_values']), s(c['default_value']), s(c['valid_regexp'], 255),
+                        i(c['access_level_r'], 10), max(i(c['access_level_rw'], 25), i(c['access_level_r'], 10)),
+                        i(c['length_min']), i(c['length_max']), b(c['require_report']), b(c['require_update']),
+                        b(c['display_report']), b(c['display_update']), b(c['display_resolved']), b(c['display_closed']),
+                        b(c['filter_by'])))
+    kept_cf = {r[0] for r in cf_rows}
+    ins('custom_field', 'id,name,type,possible_values,default_value,valid_regexp,access_level_r,access_level_rw,length_min,'
+                        'length_max,require_report,require_update,display_report,display_update,display_resolved,display_closed,filter_by', cf_rows)
     ins('project_user_list', 'project_id,user_id,access_level', [(r['project_id'], r['user_id'], i(r['access_level'], 25)) for r in pu])
     ins('category', 'id,project_id,name,user_id', [(k, v[0], v[1], v[2]) for k, v in cat_rows.items()])
     ins('project_version', 'id,project_id,version,description,released,obsolete,date_order',
@@ -234,6 +268,9 @@ def main():
     ins('bug', 'id,project_id,reporter_id,handler_id,duplicate_id,priority,severity,reproducibility,status,resolution,projection,eta,'
                'category_id,date_submitted,last_updated,os,os_build,platform,version,fixed_in_version,target_version,build,view_state,'
                'summary,sticky,description,steps_to_reproduce,additional_information', issues)
+    ins('custom_field_project', 'field_id,project_id,sequence',
+        [(r['field_id'], r['project_id'], i(r['sequence'])) for r in cf_links if r['field_id'] in kept_cf])
+    ins('custom_field_string', 'field_id,bug_id,value', [v for v in cf_values if v[0] in kept_cf])
     kept_tags = {t[0] for t in trows}
     ins('bug_tag', 'bug_id,tag_id', [x for x in bug_tags if x[1] in kept_tags])
     ins('bugnote', 'id,bug_id,reporter_id,text,view_state,date_submitted,last_modified,note_type', notes_out)

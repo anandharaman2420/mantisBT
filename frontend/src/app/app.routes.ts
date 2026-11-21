@@ -14,6 +14,7 @@ export const routes: Routes = [
       { path: 'issues/:id/edit', loadComponent: () => import('./pages/issue-form.component').then(m => m.IssueFormComponent) },
       { path: 'projects', loadComponent: () => import('./pages/projects.component').then(m => m.ProjectsComponent) },
       { path: 'users', canActivate: [adminGuard], loadComponent: () => import('./pages/users.component').then(m => m.UsersComponent) },
+      { path: 'custom-fields', canActivate: [adminGuard], loadComponent: () => import('./pages/custom-fields.component').then(m => m.CustomFieldsComponent) },
       { path: 'account', loadComponent: () => import('./pages/account.component').then(m => m.AccountComponent) }
     ]
   },
