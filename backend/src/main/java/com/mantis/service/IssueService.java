@@ -247,6 +247,11 @@ public class IssueService {
         upd(me, i, "build", i.getBuild(), f.build(), i::setBuild);
         upd(me, i, "view_state", i.getViewState(), f.viewState() == null ? null : valid(Lookups.VIEW_STATE, f.viewState(), "viewState"), i::setViewState);
 
+        // Empty version values mean "clear" in bulk and move/copy-style update forms.
+        // Null means unchanged, so normalize only non-null values after the DTO is mapped.
+        String fixedInVersion = f.fixedInVersion() == null ? null : (f.fixedInVersion().trim().isEmpty() ? null : f.fixedInVersion().trim());
+        String targetVersion = f.targetVersion() == null ? null : (f.targetVersion().trim().isEmpty() ? null : f.targetVersion().trim());
+
         if (f.categoryId() != null) {
             Long old = i.getCategory() == null ? null : i.getCategory().getId();
             if (!f.categoryId().equals(old)) {
@@ -257,8 +262,10 @@ public class IssueService {
         }
         // developer-only fields
         boolean devFieldTouched =
-                (f.fixedInVersion() != null && !f.fixedInVersion().equals(i.getFixedInVersion()))
-                || (f.targetVersion() != null && !f.targetVersion().equals(i.getTargetVersion()))
+                (fixedInVersion != null && !fixedInVersion.equals(i.getFixedInVersion()))
+                || (f.fixedInVersion() != null && fixedInVersion == null && i.getFixedInVersion() != null)
+                || (targetVersion != null && !targetVersion.equals(i.getTargetVersion()))
+                || (f.targetVersion() != null && targetVersion == null && i.getTargetVersion() != null)
                 || (f.sticky() != null && f.sticky() != i.isSticky())
                 || (f.status() != null && f.status() != i.getStatus())
                 || (f.resolution() != null && f.resolution() != i.getResolution())
@@ -270,8 +277,8 @@ public class IssueService {
                 // reporters-with-update rights may only touch nothing here; sticky needs manager
                 throw denied();
             }
-            upd(me, i, "fixed_in_version", i.getFixedInVersion(), f.fixedInVersion(), i::setFixedInVersion);
-            upd(me, i, "target_version", i.getTargetVersion(), f.targetVersion(), i::setTargetVersion);
+            upd(me, i, "fixed_in_version", i.getFixedInVersion(), fixedInVersion, i::setFixedInVersion);
+            upd(me, i, "target_version", i.getTargetVersion(), targetVersion, i::setTargetVersion);
             if (f.sticky() != null) {
                 if (lvl < Lookups.MANAGER) throw denied();
                 upd(me, i, "sticky", i.isSticky(), f.sticky(), i::setSticky);
@@ -313,6 +320,8 @@ public class IssueService {
     private Issue doChangeStatus(User me, Long id, StatusChange c) {
         Issue i = getVisible(me, id);
         int lvl = access.require(me, i.getProject(), Lookups.DEVELOPER);
+        if (i.getStatus() >= Lookups.RESOLVED && lvl < Lookups.MANAGER)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Issue is read-only (resolved/closed)");
         if (c.duplicateId() != null) {
             Issue dup = issues.findById(c.duplicateId()).orElseThrow(() -> bad("Duplicate issue not found"));
             if (dup.getId().equals(i.getId())) throw bad("An issue cannot be a duplicate of itself");

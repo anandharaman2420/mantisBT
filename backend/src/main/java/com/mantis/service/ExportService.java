@@ -50,7 +50,7 @@ public class ExportService {
                     csvCell(i.getStepsToReproduce()),
                     csvCell(i.getAdditionalInformation()),
                     csvCell(i.getPlatform()),
-                    csvCell(i.getOS()),
+                    csvCell(i.getOs()),
                     csvCell(i.getOsBuild()),
                     csvCell(i.getVersion()),
                     csvCell(i.getBuild()),

@@ -44,7 +44,8 @@ public class BulkService {
 
     /** NOT transactional itself - see class comment. */
     public BulkResult run(String username, BulkRequest r) {
-        String action = r.action().toLowerCase(Locale.ROOT);
+        if (r.action() == null) throw bad("Missing parameter: action");
+        String action = r.action().trim().toLowerCase(Locale.ROOT);
         if (!ACTIONS.contains(action)) throw bad("Unknown action: " + r.action());
         validateParams(action, r);
 
