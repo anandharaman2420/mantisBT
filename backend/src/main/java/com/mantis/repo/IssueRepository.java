@@ -19,6 +19,10 @@ public interface IssueRepository extends JpaRepository<Issue, Long>, JpaSpecific
     @EntityGraph(attributePaths = {"project", "reporter", "handler", "category"})
     Page<Issue> findAll(Specification<Issue> spec, Pageable pageable);
 
+    @Override
+    @EntityGraph(attributePaths = {"project", "reporter", "handler", "category"})
+    List<Issue> findAll(Specification<Issue> spec, org.springframework.data.domain.Sort sort);
+
     @Query("select i.status, count(i) from Issue i where i.project.id in :ids group by i.status")
     List<Object[]> countByStatus(@Param("ids") Collection<Long> ids);
 

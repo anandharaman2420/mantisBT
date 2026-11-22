@@ -1,10 +1,11 @@
-import { Component, Input, OnInit, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, inject } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
+import { fmtMinutes, parseTime } from '../core/time';
 import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, UserRef } from '../core/models';
 
 @Component({
@@ -17,9 +18,25 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
       <div class="row">
         @if (i.canUpdate) { <a [routerLink]="['/issues', i.id, 'edit']"><button>Edit</button></a> }
         <button (click)="toggleMonitor()">{{ i.monitoring ? 'Unmonitor' : 'Monitor' }}</button>
+        @if (i.canChangeStatus) { <button (click)="toggleTransfer()">Move / Copy…</button> }
         @if (i.canDelete) { <button class="danger" (click)="remove()">Delete</button> }
       </div>
     </div>
+
+    @if (showTransfer) {
+      <div class="panel" style="background:#ebf8ff;border-color:#bee3f8"><h2>Move or copy this issue</h2>
+        <div class="row" style="align-items:flex-end">
+          <div><label>Target project</label><select [(ngModel)]="targetProject"><option [ngValue]="null">– select –</option>
+            @for (p of transferProjects(); track p.id) { <option [ngValue]="p.id">{{ p.name }}{{ p.id === i.projectId ? ' (this project)' : '' }}</option> }</select></div>
+          <div><label>&nbsp;</label><button (click)="doMove()" [disabled]="!targetProject || targetProject === i.projectId">Move</button></div>
+          <div><label>&nbsp;</label><button class="primary" (click)="doCopy()" [disabled]="!targetProject">Copy</button></div>
+          <label style="display:flex;gap:5px;align-items:center;font-weight:400"><input type="checkbox" [(ngModel)]="copyNotes"> copy notes</label>
+          <label style="display:flex;gap:5px;align-items:center;font-weight:400"><input type="checkbox" [(ngModel)]="copyFiles"> copy files</label>
+          <label style="display:flex;gap:5px;align-items:center;font-weight:400"><input type="checkbox" [(ngModel)]="linkOriginal"> link to original</label>
+        </div>
+        <p class="muted" style="margin:8px 0 0">Move keeps the issue number and history; the category is matched by name, the assignee is removed if not a developer in the target project, custom fields not used there are dropped.</p>
+      </div>
+    }
 
     <div class="panel">
       <div class="grid2">
@@ -52,6 +69,12 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
     <div class="panel"><h2>Description</h2><div class="pre">{{ i.description }}</div>
       @if (i.stepsToReproduce) { <h2 style="margin-top:14px">Steps to reproduce</h2><div class="pre">{{ i.stepsToReproduce }}</div> }
       @if (i.additionalInformation) { <h2 style="margin-top:14px">Additional information</h2><div class="pre">{{ i.additionalInformation }}</div> }</div>
+
+    @if (i.customFields.length) {
+      <div class="panel"><h2>Custom fields</h2><dl class="kv">
+        @for (f of i.customFields; track f.fieldId) { <dt>{{ f.name }}</dt><dd class="pre">{{ f.value ? f.value.split('|').join(', ') : '–' }}</dd> }
+      </dl></div>
+    }
 
     <div class="panel"><h2>Attached files ({{ files.length }})</h2>
       @for (f of files; track f.id) {
@@ -92,11 +115,12 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
       </div>
     }
 
-    <div class="panel"><h2>Notes ({{ notes.length }})</h2>
+    <div class="panel"><h2>Notes ({{ notes.length }}) @if (i.timeMinutes) { <span class="muted" style="font-weight:400">· time spent: {{ fmt(i.timeMinutes) }} h</span> }</h2>
       @for (n of notes; track n.id) {
         <div class="note" [class.private]="n.viewState === 50">
           <div class="muted"><b style="color:var(--text)">{{ n.reporter.username }}</b> · {{ n.dateSubmitted | date:'yyyy-MM-dd HH:mm' }}
             @if (n.viewState === 50) { · 🔒 private }
+            @if (n.timeMinutes) { · ⏱ {{ fmt(n.timeMinutes) }} h }
             @if (n.canEdit) { · <a href="#" (click)="editNote(n); $event.preventDefault()">edit</a> · <a href="#" (click)="deleteNote(n); $event.preventDefault()">delete</a> }</div>
           @if (editingNote?.id === n.id) {
             <textarea [(ngModel)]="editText" rows="3"></textarea>
@@ -108,6 +132,7 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
         <div style="margin-top:12px"><label>Add note</label><textarea [(ngModel)]="newNote" rows="3"></textarea>
           <div class="row" style="margin-top:6px;align-items:center">
             @if (isDev()) { <label style="display:flex;gap:5px;align-items:center;margin:0;font-weight:400"><input type="checkbox" [(ngModel)]="notePrivate"> private</label> }
+            @if (auth.config().timeTracking && isDev()) { <input style="width:170px" [(ngModel)]="timeText" placeholder="time spent (h:mm)" title="e.g. 1:30, 90, 1.5h"> }
             <button class="primary" (click)="addNote()" [disabled]="!newNote.trim()">Add note</button></div></div>
       }
     </div>
@@ -124,7 +149,7 @@ import { AttachmentView, HistoryView, IssueView, NoteView, RelationshipView, Use
     </div>
   }`
 })
-export class IssueViewComponent implements OnInit {
+export class IssueViewComponent implements OnInit, OnChanges {
   @Input() id!: string;
   auth = inject(AuthService);
   private api = inject(ApiService);
@@ -133,12 +158,33 @@ export class IssueViewComponent implements OnInit {
   i: IssueView | null = null; error = '';
   notes: NoteView[] = []; files: AttachmentView[] = []; rels: RelationshipView[] = []; hist: HistoryView[] = [];
   handlers: UserRef[] = []; showHistory = false;
+  fmt = fmtMinutes; timeText = '';
   newNote = ''; notePrivate = false; editingNote: { id: number; text: string; viewState: number } | null = null;
   editText = '';
   relType = 1; relOther: number | null = null;
   st: any = { status: 10, resolution: null, handlerId: null, duplicateId: null, note: '' };
 
+  showTransfer = false; targetProject: number | null = null;
+  copyNotes = false; copyFiles = false; linkOriginal = true;
   ngOnInit() { this.load(); }
+  /** the router re-uses this component when only :id changes (copy, relationship links) -> reload */
+  ngOnChanges(c: SimpleChanges) {
+    if (c['id'] && !c['id'].firstChange) {
+      this.i = null; this.error = ''; this.showTransfer = false; this.handlers = []; this.hist = [];
+      this.load();
+    }
+  }
+
+  toggleTransfer() { this.showTransfer = !this.showTransfer; this.targetProject = null; }
+  transferProjects() { return this.auth.projects().filter(p => p.myAccess >= 25); }
+  doMove() {
+    if (!confirm('Move this issue to the selected project?')) return;
+    this.api.moveIssue(this.i!.id, this.targetProject!).subscribe({ next: () => { this.showTransfer = false; this.error = ''; this.load(); }, error: this.fail });
+  }
+  doCopy() {
+    this.api.copyIssue(this.i!.id, { projectId: this.targetProject, copyNotes: this.copyNotes, copyAttachments: this.copyFiles, linkToOriginal: this.linkOriginal })
+      .subscribe({ next: n => { this.showTransfer = false; this.router.navigate(['/issues', n.id]); }, error: this.fail });
+  }
 
   isDev() { return this.i?.canChangeStatus ?? false; }
   monitorNames() { return this.i!.monitors.map(m => m.username).join(', '); }
@@ -173,8 +219,10 @@ export class IssueViewComponent implements OnInit {
       .subscribe({ next: () => { this.st.note = ''; this.error = ''; this.load(); }, error: this.fail });
   }
   addNote() {
-    this.api.addNote(this.i!.id, this.newNote, this.notePrivate ? 50 : 10)
-      .subscribe({ next: () => { this.newNote = ''; this.notePrivate = false; this.load(); }, error: this.fail });
+    const minutes = parseTime(this.timeText);
+    if (minutes === null) { this.error = 'Time must look like 1:30, 90 or 1.5h'; return; }
+    this.api.addNote(this.i!.id, this.newNote, this.notePrivate ? 50 : 10, minutes)
+      .subscribe({ next: () => { this.newNote = ''; this.notePrivate = false; this.timeText = ''; this.error = ''; this.load(); }, error: this.fail });
   }
   editNote(n: NoteView) { this.editingNote = { id: n.id, text: n.text, viewState: n.viewState }; this.editText = n.text; }
   saveNote() {

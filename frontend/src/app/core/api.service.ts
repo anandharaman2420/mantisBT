@@ -15,6 +15,7 @@ export class ApiService {
   changePassword(currentPassword: string, newPassword: string) {
     return this.http.post<{ message: string }>(`${this.base}/auth/change-password`, { currentPassword, newPassword });
   }
+  setPreferences(emailEnabled: boolean) { return this.http.put<M.UserView>(`${this.base}/auth/preferences`, { emailEnabled }); }
   meta() { return this.http.get<M.Meta>(`${this.base}/meta`); }
 
   // projects
@@ -43,16 +44,40 @@ export class ApiService {
   deleteUser(id: number) { return this.http.delete<void>(`${this.base}/users/${id}`); }
 
   // issues
-  issues(q: M.IssueQuery): Observable<M.PageResult<M.IssueSummary>> {
+  private buildIssueParams(q: M.IssueQuery): HttpParams {
     let p = new HttpParams();
     const set = (k: string, v: unknown) => { if (v !== null && v !== undefined && v !== '') p = p.append(k, String(v)); };
     set('projectId', q.projectId); set('handlerId', q.handlerId); set('reporterId', q.reporterId);
     set('priority', q.priority); set('severity', q.severity); set('categoryId', q.categoryId);
     set('q', q.q); set('tag', q.tag); set('hideClosed', q.hideClosed); set('sortBy', q.sortBy);
-    set('dir', q.dir); set('page', q.page); set('size', q.size);
+    set('dir', q.dir);
+    if (q.page !== undefined) set('page', q.page);
+    if (q.size !== undefined) set('size', q.size);
     (q.status ?? []).forEach(s => set('status', s));
-    return this.http.get<M.PageResult<M.IssueSummary>>(`${this.base}/issues`, { params: p });
+    return p;
   }
+
+  issues(q: M.IssueQuery): Observable<M.PageResult<M.IssueSummary>> {
+    return this.http.get<M.PageResult<M.IssueSummary>>(`${this.base}/issues`, { params: this.buildIssueParams(q) });
+  }
+
+  exportCsv(q: M.IssueQuery): Observable<Blob> {
+    return this.http.get(`${this.base}/issues/export/csv`, { params: this.buildIssueParams(q), responseType: 'blob' });
+  }
+
+  exportExcel(q: M.IssueQuery): Observable<Blob> {
+    return this.http.get(`${this.base}/issues/export/excel`, { params: this.buildIssueParams(q), responseType: 'blob' });
+  }
+
+  // saved filters
+  savedFilters(projectId?: number | null): Observable<M.SavedFilterView[]> {
+    let p = new HttpParams();
+    if (projectId) p = p.set('projectId', projectId);
+    return this.http.get<M.SavedFilterView[]>(`${this.base}/filters`, { params: p });
+  }
+  createFilter(f: M.SavedFilterForm): Observable<M.SavedFilterView> { return this.http.post<M.SavedFilterView>(`${this.base}/filters`, f); }
+  updateFilter(id: number, f: M.SavedFilterForm): Observable<M.SavedFilterView> { return this.http.put<M.SavedFilterView>(`${this.base}/filters/${id}`, f); }
+  deleteFilter(id: number): Observable<void> { return this.http.delete<void>(`${this.base}/filters/${id}`); }
   issue(id: number) { return this.http.get<M.IssueView>(`${this.base}/issues/${id}`); }
   createIssue(f: M.IssueForm) { return this.http.post<M.IssueView>(`${this.base}/issues`, f); }
   updateIssue(id: number, f: M.IssueForm) { return this.http.put<M.IssueView>(`${this.base}/issues/${id}`, f); }
@@ -63,7 +88,7 @@ export class ApiService {
   }
   history(id: number) { return this.http.get<M.HistoryView[]>(`${this.base}/issues/${id}/history`); }
   notes(id: number) { return this.http.get<M.NoteView[]>(`${this.base}/issues/${id}/notes`); }
-  addNote(id: number, text: string, viewState: number) { return this.http.post<M.NoteView>(`${this.base}/issues/${id}/notes`, { text, viewState }); }
+  addNote(id: number, text: string, viewState: number, timeMinutes?: number) { return this.http.post<M.NoteView>(`${this.base}/issues/${id}/notes`, { text, viewState, timeMinutes: timeMinutes || null }); }
   updateNote(noteId: number, text: string, viewState: number) { return this.http.put<M.NoteView>(`${this.base}/notes/${noteId}`, { text, viewState }); }
   deleteNote(noteId: number) { return this.http.delete<void>(`${this.base}/notes/${noteId}`); }
   attachments(id: number) { return this.http.get<M.AttachmentView[]>(`${this.base}/issues/${id}/attachments`); }
@@ -78,6 +103,38 @@ export class ApiService {
   relationships(id: number) { return this.http.get<M.RelationshipView[]>(`${this.base}/issues/${id}/relationships`); }
   addRelationship(id: number, type: number, otherIssueId: number) { return this.http.post<M.RelationshipView>(`${this.base}/issues/${id}/relationships`, { type, otherIssueId }); }
   deleteRelationship(relId: number) { return this.http.delete<void>(`${this.base}/relationships/${relId}`); }
+
+  // bulk project setup
+  bulkCategories(pid: number, rows: { name: string; assignee: string }[]) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/categories/bulk`, { rows }); }
+  bulkVersions(pid: number, rows: any[]) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/versions/bulk`, { rows }); }
+  bulkMembers(pid: number, body: any) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/members/bulk`, body); }
+  removeMembersBulk(pid: number, userIds: number[]) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/members/remove-bulk`, { userIds }); }
+  copyFrom(pid: number, body: any) { return this.http.post<M.CopyResult>(`${this.base}/projects/${pid}/copy-from`, body); }
+
+  // config / time tracking
+  config() { return this.http.get<M.AppConfig>(`${this.base}/config`); }
+  timeReport(projectId: number | null, from: string, to: string) {
+    const params: any = { from, to }; if (projectId) params.projectId = projectId;
+    return this.http.get<M.TimeReport>(`${this.base}/time-tracking`, { params });
+  }
+
+  // bulk / move / copy
+  bulk(req: any) { return this.http.post<M.BulkResult>(`${this.base}/issues/bulk`, req); }
+  moveIssue(id: number, projectId: number) { return this.http.post<M.IssueView>(`${this.base}/issues/${id}/move`, { projectId }); }
+  copyIssue(id: number, body: { projectId: number | null; copyNotes: boolean; copyAttachments: boolean; linkToOriginal: boolean }) {
+    return this.http.post<M.IssueView>(`${this.base}/issues/${id}/copy`, body);
+  }
+
+  // custom fields
+  customFields() { return this.http.get<M.CustomFieldView[]>(`${this.base}/custom-fields`); }
+  createCustomField(f: any) { return this.http.post<M.CustomFieldView>(`${this.base}/custom-fields`, f); }
+  updateCustomField(id: number, f: any) { return this.http.put<M.CustomFieldView>(`${this.base}/custom-fields/${id}`, f); }
+  deleteCustomField(id: number) { return this.http.delete<void>(`${this.base}/custom-fields/${id}`); }
+  linkedFields(pid: number) { return this.http.get<M.CustomFieldView[]>(`${this.base}/projects/${pid}/custom-field-links`); }
+  availableFields(pid: number) { return this.http.get<M.CustomFieldView[]>(`${this.base}/projects/${pid}/custom-field-links/available`); }
+  linkField(pid: number, fieldId: number) { return this.http.put<void>(`${this.base}/projects/${pid}/custom-field-links`, { fieldId }); }
+  unlinkField(pid: number, fieldId: number) { return this.http.delete<void>(`${this.base}/projects/${pid}/custom-field-links/${fieldId}`); }
+  reportFields(pid: number) { return this.http.get<M.IssueFieldValue[]>(`${this.base}/projects/${pid}/custom-fields`); }
 
   // tags / news
   tags() { return this.http.get<M.TagView[]>(`${this.base}/tags`); }

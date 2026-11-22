@@ -11,6 +11,7 @@ public class User {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false, unique = true, length = 191) private String username;
+    public String getUsername() { return username; }
     @Column(length = 191) private String realname = "";
     @Column(nullable = false, length = 191) private String email = "";
     @Column(nullable = false, length = 255) private String password;
@@ -20,4 +21,6 @@ public class User {
     @Column(name = "protected") private boolean protectedUser = false;
     @Column(name = "access_level") private int accessLevel = 25;
     @Column(name = "login_count") private int loginCount = 0;
+    /** e-mail notifications on/off (default true also for rows that already exist) */
+    @Column(name = "email_enabled", columnDefinition = "boolean default true") private boolean emailEnabled = true;
 }

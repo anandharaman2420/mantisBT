@@ -4,9 +4,11 @@ import com.mantis.domain.Lookups;
 import com.mantis.domain.Project;
 import com.mantis.domain.User;
 import com.mantis.dto.Dtos.*;
+import com.mantis.repo.SavedFilterRepository;
 import com.mantis.repo.UserRepository;
 import com.mantis.security.CurrentUser;
 import com.mantis.service.AccessService;
+import com.mantis.service.ApiTokenService;
 import com.mantis.service.Mapper;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,9 +27,13 @@ public class UserController {
     private final PasswordEncoder encoder;
     private final CurrentUser current;
     private final AccessService access;
+    private final SavedFilterRepository savedFilters;
+    private final ApiTokenService apiTokens;
 
-    public UserController(UserRepository users, PasswordEncoder encoder, CurrentUser current, AccessService access) {
+    public UserController(UserRepository users, PasswordEncoder encoder, CurrentUser current,
+                          AccessService access, SavedFilterRepository savedFilters, ApiTokenService apiTokens) {
         this.users = users; this.encoder = encoder; this.current = current; this.access = access;
+        this.savedFilters = savedFilters; this.apiTokens = apiTokens;
     }
 
     @GetMapping
@@ -93,6 +99,8 @@ public class UserController {
         access.requireAdmin(me);
         if (me.getId().equals(id)) throw bad("You cannot delete your own account");
         User u = users.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        savedFilters.deleteByUserId(id);
+        apiTokens.deleteAllForUser(id);
         users.delete(u);
         users.flush();     // surface FK violations here (user still referenced by issues) -> 409
     }

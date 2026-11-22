@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { tap } from 'rxjs';
 import { ApiService } from './api.service';
-import { Meta, ProjectView, UserView } from './models';
+import { AppConfig, Meta, ProjectView, UserView } from './models';
 
 const TOKEN_KEY = 'mantis.token';
 const PROJECT_KEY = 'mantis.project';
@@ -15,10 +15,36 @@ export class AuthService {
 
   user = signal<UserView | null>(null);
   meta = signal<Meta>({});
+  config = signal<AppConfig>({ timeTracking: false });
   projects = signal<ProjectView[]>([]);
   /** null = "All Projects" */
   projectId = signal<number | null>(this.readProject());
   isAdmin = computed(() => (this.user()?.accessLevel ?? 0) >= 90);
+  /** manager in at least one project (may open the time report) */
+  isManager = computed(() => this.projects().some(p => p.myAccess >= 70));
+  /** projects as an indented tree (parents first, sub-projects below) for dropdowns */
+  projectOptions = computed(() => {
+    const list = this.projects();
+    const known = new Set(list.map(p => p.id));
+    const kids = new Map<number | null, ProjectView[]>();
+    for (const p of list) {
+      const key = p.parentId !== null && known.has(p.parentId) ? p.parentId : null;   // parent not visible -> show as top level
+      if (!kids.has(key)) kids.set(key, []);
+      kids.get(key)!.push(p);
+    }
+    const out: { project: ProjectView; depth: number; label: string }[] = [];
+    const seen = new Set<number>();
+    const walk = (parent: number | null, depth: number) => {
+      for (const p of kids.get(parent) ?? []) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        out.push({ project: p, depth, label: '\u00A0\u00A0'.repeat(depth) + (depth ? '└ ' : '') + p.name });
+        walk(p.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return out;
+  });
   currentProject = computed(() => this.projects().find(p => p.id === this.projectId()) ?? null);
 
   get token(): string | null { return localStorage.getItem(TOKEN_KEY); }
@@ -34,9 +60,9 @@ export class AuthService {
   /** loads user, enum labels and project list; called by the guard on every page refresh */
   bootstrap() {
     return Promise.all([
-      this.api.me().toPromise(), this.api.meta().toPromise(), this.api.projects().toPromise()
-    ]).then(([u, m, p]) => {
-      this.user.set(u!); this.meta.set(m!); this.projects.set(p!);
+      this.api.me().toPromise(), this.api.meta().toPromise(), this.api.projects().toPromise(), this.api.config().toPromise()
+    ]).then(([u, m, p, c]) => {
+      this.user.set(u!); this.meta.set(m!); this.projects.set(p!); this.config.set(c!);
       if (this.projectId() !== null && !p!.some(x => x.id === this.projectId())) this.selectProject(null);
     });
   }

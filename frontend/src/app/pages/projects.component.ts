@@ -4,20 +4,24 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
-import { ACCESS, CategoryView, MemberView, NewsView, ProjectView, UserRef, VersionView } from '../core/models';
+import { BulkCategoriesComponent } from '../shared/bulk-categories.component';
+import { BulkMembersComponent } from '../shared/bulk-members.component';
+import { BulkVersionsComponent } from '../shared/bulk-versions.component';
+import { CopySetupComponent } from '../shared/copy-setup.component';
+import { ACCESS, CategoryView, CustomFieldView, MemberView, NewsView, ProjectView, UserRef, VersionView } from '../core/models';
 
 @Component({
-  selector: 'app-projects', standalone: true, imports: [FormsModule, DatePipe],
+  selector: 'app-projects', standalone: true, imports: [FormsModule, DatePipe, BulkCategoriesComponent, BulkVersionsComponent, BulkMembersComponent, CopySetupComponent],
   template: `
   <h1>Manage Projects</h1>
   @if (error) { <div class="err">{{ error }}</div> }
   <div class="grid2" style="grid-template-columns: 1fr 1.6fr">
     <div class="panel"><h2>Projects</h2>
       <table><thead><tr><th>Name</th><th>Status</th><th>Visibility</th><th></th></tr></thead><tbody>
-        @for (p of auth.projects(); track p.id) {
-          <tr [style.background]="sel?.id === p.id ? '#ebf4ff' : ''"><td>{{ p.name }}</td><td>{{ auth.label('projectStatus', p.status) }}</td>
-            <td>{{ auth.label('viewState', p.viewState) }}</td>
-            <td class="right">@if (p.myAccess >= MANAGER) { <button class="small" (click)="select(p)">manage</button> }</td></tr>
+        @for (o of auth.projectOptions(); track o.project.id) {
+          <tr [style.background]="sel?.id === o.project.id ? '#ebf4ff' : ''"><td>{{ o.label }}</td><td>{{ auth.label('projectStatus', o.project.status) }}</td>
+            <td>{{ auth.label('viewState', o.project.viewState) }}</td>
+            <td class="right">@if (o.project.myAccess >= MANAGER) { <button class="small" (click)="select(o.project)">manage</button> }</td></tr>
         }
       </tbody></table>
       @if (auth.isAdmin()) {
@@ -25,6 +29,8 @@ import { ACCESS, CategoryView, MemberView, NewsView, ProjectView, UserRef, Versi
         <div class="row"><div class="grow"><label>Name</label><input [(ngModel)]="np.name"></div>
           <div><label>Status</label><select [(ngModel)]="np.status">@for (o of auth.options('projectStatus'); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
           <div><label>Visibility</label><select [(ngModel)]="np.viewState">@for (o of auth.options('viewState'); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
+          <div><label>Parent project</label><select [(ngModel)]="np.parentId"><option [ngValue]="null">– none (top level) –</option>
+            @for (o of auth.projectOptions(); track o.project.id) { <option [ngValue]="o.project.id">{{ o.label }}</option> }</select></div>
           <div><label>&nbsp;</label><button class="primary" (click)="create()">Create</button></div></div>
       }
     </div>
@@ -38,6 +44,11 @@ import { ACCESS, CategoryView, MemberView, NewsView, ProjectView, UserRef, Versi
             <div><label>Status</label><select [(ngModel)]="edit.status">@for (o of auth.options('projectStatus'); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
             <div><label>Visibility</label><select [(ngModel)]="edit.viewState">@for (o of auth.options('viewState'); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div></div>
           <div style="margin-bottom:10px"><label>Description</label><textarea [(ngModel)]="edit.description" rows="3"></textarea></div>
+          <div class="row" style="margin-bottom:10px"><div><label>Parent project {{ auth.isAdmin() ? '' : '(administrator only)' }}</label>
+            <select [(ngModel)]="edit.parentId" [disabled]="!auth.isAdmin()"><option [ngValue]="null">– none (top level) –</option>
+              @for (o of parentChoices(); track o.project.id) { <option [ngValue]="o.project.id">{{ o.label }}</option> }</select></div>
+            @if (edit.parentId) { <label style="display:flex;gap:6px;align-items:center;font-weight:400;margin-top:18px"><input type="checkbox" [(ngModel)]="edit.inheritParent" [disabled]="!auth.isAdmin()">
+              inherit categories, versions, custom fields and access from parent</label> }</div>
           <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" [(ngModel)]="edit.enabled"> enabled</label>
           <div class="row" style="margin-top:12px"><button class="primary" (click)="saveProject()">Save</button>
             @if (auth.isAdmin()) { <button class="danger" (click)="deleteProject()">Delete project</button> }</div>
@@ -45,21 +56,23 @@ import { ACCESS, CategoryView, MemberView, NewsView, ProjectView, UserRef, Versi
 
         @if (tab === 'Categories') {
           <table><thead><tr><th>Name</th><th>Default assignee</th><th></th></tr></thead><tbody>
-            @for (c of cats; track c.id) { <tr><td>{{ c.name }}</td><td>{{ c.defaultHandlerName }}</td><td class="right"><button class="small danger" (click)="delCat(c)">delete</button></td></tr> }
+            @for (c of cats; track c.id) { <tr><td>{{ c.name }} @if (c.inherited) { <span class="muted">(inherited)</span> }</td><td>{{ c.defaultHandlerName }}</td><td class="right">@if (!c.inherited) { <button class="small danger" (click)="delCat(c)">delete</button> }</td></tr> }
           </tbody></table>
           <div class="row" style="margin-top:10px"><div class="grow"><label>New category</label><input [(ngModel)]="newCat"></div>
             <div><label>Default assignee</label><select [(ngModel)]="newCatHandler"><option [ngValue]="null">–</option>@for (u of devs; track u.id) { <option [ngValue]="u.id">{{ u.username }}</option> }</select></div>
             <div><label>&nbsp;</label><button class="primary" (click)="addCat()">Add</button></div></div>
+          <app-bulk-categories [projectId]="sel.id" (done)="setTab('Categories')" />
         }
 
         @if (tab === 'Versions') {
           <table><thead><tr><th>Version</th><th>Released</th><th>Obsolete</th><th></th></tr></thead><tbody>
-            @for (v of vers; track v.id) { <tr><td>{{ v.version }}</td><td><input type="checkbox" [ngModel]="v.released" (ngModelChange)="toggleVer(v, 'released', $event)"></td>
-              <td><input type="checkbox" [ngModel]="v.obsolete" (ngModelChange)="toggleVer(v, 'obsolete', $event)"></td>
-              <td class="right"><button class="small danger" (click)="delVer(v)">delete</button></td></tr> }
+            @for (v of vers; track v.id) { <tr><td>{{ v.version }} @if (v.inherited) { <span class="muted">(inherited)</span> }</td><td><input type="checkbox" [disabled]="v.inherited" [ngModel]="v.released" (ngModelChange)="toggleVer(v, 'released', $event)"></td>
+              <td><input type="checkbox" [disabled]="v.inherited" [ngModel]="v.obsolete" (ngModelChange)="toggleVer(v, 'obsolete', $event)"></td>
+              <td class="right">@if (!v.inherited) { <button class="small danger" (click)="delVer(v)">delete</button> }</td></tr> }
           </tbody></table>
           <div class="row" style="margin-top:10px"><div class="grow"><label>New version</label><input [(ngModel)]="newVer"></div>
             <div><label>&nbsp;</label><button class="primary" (click)="addVer()">Add</button></div></div>
+          <app-bulk-versions [projectId]="sel.id" (done)="setTab('Versions')" />
         }
 
         @if (tab === 'Members') {
@@ -72,6 +85,22 @@ import { ACCESS, CategoryView, MemberView, NewsView, ProjectView, UserRef, Versi
             <div class="grow"><label>User</label><select [(ngModel)]="memUser"><option [ngValue]="null">– select –</option>@for (u of allUsers; track u.id) { <option [ngValue]="u.id">{{ u.username }}</option> }</select></div>
             <div><label>Level</label><select [(ngModel)]="memLevel">@for (o of levels(); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
             <div><label>&nbsp;</label><button class="primary" (click)="setMember()" [disabled]="!memUser">Set</button></div></div>
+          <app-bulk-members [projectId]="sel.id" [myAccess]="sel.myAccess" (done)="setTab('Members')" />
+        }
+
+        @if (tab === 'Custom fields') {
+          <p class="muted">Fields that appear on issues of this project. Define new fields under "Custom Fields" (administrator).</p>
+          <table><thead><tr><th>Field</th><th></th></tr></thead><tbody>
+            @for (f of linked; track f.id) { <tr><td>{{ f.name }}</td><td class="right"><button class="small danger" (click)="unlink(f)">remove</button></td></tr> }
+          </tbody></table>
+          <div class="row" style="margin-top:10px"><div class="grow"><label>Add existing field</label>
+            <select [(ngModel)]="linkId"><option [ngValue]="null">– select –</option>@for (f of available; track f.id) { <option [ngValue]="f.id">{{ f.name }}</option> }</select></div>
+            <div><label>&nbsp;</label><button class="primary" (click)="link()" [disabled]="!linkId">Add</button></div></div>
+          <p class="muted" style="margin-top:8px">Removing a field also deletes its values on this project's issues.</p>
+        }
+
+        @if (tab === 'Copy setup') {
+          <app-copy-setup [projectId]="sel.id" (done)="setTab('Copy setup')" />
         }
 
         @if (tab === 'News') {
@@ -92,21 +121,34 @@ export class ProjectsComponent {
   private api = inject(ApiService);
   MANAGER = ACCESS.MANAGER;
   error = '';
-  np: any = { name: '', status: 10, viewState: 10 };
+  np: any = { name: '', status: 10, viewState: 10, parentId: null };
   sel: ProjectView | null = null; edit: any = {};
-  tabs = ['Details', 'Categories', 'Versions', 'Members', 'News']; tab = 'Details';
+  tabs = ['Details', 'Categories', 'Versions', 'Members', 'Custom fields', 'Copy setup', 'News']; tab = 'Details';
   cats: CategoryView[] = []; vers: VersionView[] = []; mems: MemberView[] = []; news: NewsView[] = [];
   newCat = ''; newCatHandler: number | null = null; newVer = '';
   devs: UserRef[] = []; allUsers: UserRef[] = []; memUser: number | null = null; memLevel = 25;
   nn = { headline: '', body: '' };
+  linked: CustomFieldView[] = []; available: CustomFieldView[] = []; linkId: number | null = null;
 
   private fail = (e: any) => this.error = errMsg(e);
+
+  /** possible parents: every visible project except this one and its own sub-projects */
+  parentChoices() {
+    const banned = new Set<number>([this.sel!.id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const p of this.auth.projects())
+        if (p.parentId !== null && banned.has(p.parentId) && !banned.has(p.id)) { banned.add(p.id); grew = true; }
+    }
+    return this.auth.projectOptions().filter(o => !banned.has(o.project.id));
+  }
 
   levels() { return this.auth.options('access').filter(o => o.value >= 10 && o.value < 90 && o.value <= (this.sel?.myAccess ?? 0)); }
 
   create() {
     this.api.createProject(this.np).subscribe({
-      next: async () => { this.np = { name: '', status: 10, viewState: 10 }; this.error = ''; await this.auth.reloadProjects(); }, error: this.fail });
+      next: async () => { this.np = { name: '', status: 10, viewState: 10, parentId: null }; this.error = ''; await this.auth.reloadProjects(); }, error: this.fail });
   }
   select(p: ProjectView) {
     this.sel = p; this.edit = { ...p }; this.tab = 'Details'; this.error = '';
@@ -119,10 +161,15 @@ export class ProjectsComponent {
     if (t === 'Categories') this.api.categories(id).subscribe(c => this.cats = c);
     if (t === 'Versions') this.api.versions(id).subscribe(v => this.vers = v);
     if (t === 'Members') this.api.members(id).subscribe(m => this.mems = m);
+    if (t === 'Custom fields') { this.api.linkedFields(id).subscribe(l => this.linked = l); this.api.availableFields(id).subscribe(a => this.available = a); }
     if (t === 'News') this.api.news(id).subscribe(n => this.news = n.filter(x => x.projectId === id));
   }
   saveProject() {
-    this.api.updateProject(this.sel!.id, this.edit).subscribe({
+    // only administrators may change the tree; for managers the fields are omitted (unchanged)
+    const body = this.auth.isAdmin()
+      ? { ...this.edit, parentId: this.edit.parentId ?? 0, inheritParent: this.edit.parentId ? this.edit.inheritParent : true }
+      : { ...this.edit, parentId: undefined, inheritParent: undefined };
+    this.api.updateProject(this.sel!.id, body).subscribe({
       next: async p => { await this.auth.reloadProjects(); this.sel = this.auth.projects().find(x => x.id === p.id) ?? null; this.error = ''; }, error: this.fail });
   }
   deleteProject() {
@@ -139,6 +186,8 @@ export class ProjectsComponent {
   delVer(v: VersionView) { this.api.deleteVersion(v.id).subscribe({ next: () => this.setTab('Versions'), error: this.fail }); }
   setMember() { this.api.setMember(this.sel!.id, this.memUser!, this.memLevel).subscribe({ next: () => { this.error = ''; this.setTab('Members'); }, error: this.fail }); }
   delMember(m: MemberView) { this.api.removeMember(this.sel!.id, m.userId).subscribe({ next: () => this.setTab('Members'), error: this.fail }); }
+  link() { this.api.linkField(this.sel!.id, this.linkId!).subscribe({ next: () => { this.linkId = null; this.error = ''; this.setTab('Custom fields'); }, error: this.fail }); }
+  unlink(f: CustomFieldView) { if (confirm('Remove "' + f.name + '" from this project (its values on the project\'s issues are deleted)?')) this.api.unlinkField(this.sel!.id, f.id).subscribe({ next: () => this.setTab('Custom fields'), error: this.fail }); }
   addNews() { this.api.addNews({ projectId: this.sel!.id, headline: this.nn.headline, body: this.nn.body }).subscribe({ next: () => { this.nn = { headline: '', body: '' }; this.setTab('News'); }, error: this.fail }); }
   delNews(n: NewsView) { this.api.deleteNews(n.id).subscribe({ next: () => this.setTab('News'), error: this.fail }); }
 }

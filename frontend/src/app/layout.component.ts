@@ -14,12 +14,14 @@ import { AuthService } from './core/auth.service';
         <a routerLink="/issues" routerLinkActive="on">View Issues</a>
         <a routerLink="/report" routerLinkActive="on">Report Issue</a>
         <a routerLink="/projects" routerLinkActive="on">Manage Projects</a>
+        @if (auth.config().timeTracking && auth.isManager()) { <a routerLink="/time-report" routerLinkActive="on">Time Report</a> }
         @if (auth.isAdmin()) { <a routerLink="/users" routerLinkActive="on">Manage Users</a> }
+        @if (auth.isAdmin() || (auth.user()?.accessLevel ?? 0) >= 55) { <a routerLink="/custom-fields" routerLinkActive="on">Custom Fields</a> }
       </nav>
       <span class="sp"></span>
       <select class="proj" [ngModel]="auth.projectId()" (ngModelChange)="auth.selectProject($event)">
         <option [ngValue]="null">All Projects</option>
-        @for (p of auth.projects(); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+        @for (o of auth.projectOptions(); track o.project.id) { <option [ngValue]="o.project.id">{{ o.label }}</option> }
       </select>
       <a routerLink="/account" class="user">{{ auth.user()?.username }}</a>
       <button class="small" (click)="auth.logout()">Logout</button>

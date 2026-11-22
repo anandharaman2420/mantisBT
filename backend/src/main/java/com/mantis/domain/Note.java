@@ -17,4 +17,6 @@ public class Note {
     @Column(name = "last_modified") private Instant lastModified = Instant.now();
     /** 0 normal, 1 reminder, 2 time tracking */
     @Column(name = "note_type") private int noteType = 0;
+    /** minutes spent (Mantis time tracking); column has a DDL default so existing rows stay valid */
+    @Column(name = "time_tracking", columnDefinition = "integer default 0") private int timeTracking = 0;
 }

@@ -13,12 +13,12 @@ public final class Mapper {
 
     public static UserView user(User u) {
         return new UserView(u.getId(), u.getUsername(), u.getRealname(), u.getEmail(), u.getAccessLevel(),
-                u.isEnabled(), u.isProtectedUser(), u.getDateCreated(), u.getLastVisit());
+                u.isEnabled(), u.isProtectedUser(), u.getDateCreated(), u.getLastVisit(), u.isEmailEnabled());
     }
 
     public static ProjectView project(Project p, int myAccess) {
         return new ProjectView(p.getId(), p.getName(), p.getStatus(), p.isEnabled(), p.getViewState(),
-                p.getDescription(), myAccess);
+                p.getDescription(), myAccess, p.getParent() == null ? null : p.getParent().getId(), p.isInheritParent());
     }
 
     public static IssueSummary summary(Issue i) {

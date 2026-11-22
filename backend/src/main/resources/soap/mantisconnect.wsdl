@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WSDL for the MantisConnect-compatible SOAP 1.1 endpoint implemented by this application.
+  It documents the supported subset only. Operations that are not listed here are not implemented
+  and return a SOAP fault (see docs/API_COMPATIBILITY.md).
+-->
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:tns="http://futureware.biz/mantisconnect"
+             targetNamespace="http://futureware.biz/mantisconnect"
+             name="MantisConnect">
+
+  <types>
+    <xsd:schema targetNamespace="http://futureware.biz/mantisconnect" elementFormDefault="qualified">
+
+      <xsd:complexType name="EnumData">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="name" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="label" type="xsd:string" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="UserData">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="name" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="real_name" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="email" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="access_level" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="enabled" type="xsd:boolean" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="ProjectData">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="name" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="status" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="enabled" type="xsd:boolean" minOccurs="0"/>
+          <xsd:element name="view_state" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="description" type="xsd:string" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="TagData">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="name" type="xsd:string" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="NoteData">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="reporter" type="tns:UserData" minOccurs="0"/>
+          <xsd:element name="text" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="view_state" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="note_type" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="time_tracking" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="date_submitted" type="xsd:dateTime" minOccurs="0"/>
+          <xsd:element name="last_modified" type="xsd:dateTime" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="IssueData">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="project" type="tns:ProjectData" minOccurs="0"/>
+          <xsd:element name="category" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="reporter" type="tns:UserData" minOccurs="0"/>
+          <xsd:element name="handler" type="tns:UserData" minOccurs="0"/>
+          <xsd:element name="summary" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="description" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="steps_to_reproduce" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="additional_information" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="status" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="resolution" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="priority" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="severity" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="reproducibility" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="projection" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="eta" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="view_state" type="tns:EnumData" minOccurs="0"/>
+          <xsd:element name="os" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="os_build" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="platform" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="version" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="fixed_in_version" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="target_version" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="build" type="xsd:string" minOccurs="0"/>
+          <xsd:element name="sticky" type="xsd:boolean" minOccurs="0"/>
+          <xsd:element name="date_submitted" type="xsd:dateTime" minOccurs="0"/>
+          <xsd:element name="last_updated" type="xsd:dateTime" minOccurs="0"/>
+          <xsd:element name="time_tracking" type="xsd:integer" minOccurs="0"/>
+          <xsd:element name="tags" minOccurs="0">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="item" type="tns:TagData" minOccurs="0" maxOccurs="unbounded"/>
+              </xsd:sequence>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="notes" minOccurs="0">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="item" type="tns:NoteData" minOccurs="0" maxOccurs="unbounded"/>
+              </xsd:sequence>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="ArrayOfProjectData">
+        <xsd:sequence>
+          <xsd:element name="item" type="tns:ProjectData" minOccurs="0" maxOccurs="unbounded"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="ArrayOfIssueData">
+        <xsd:sequence>
+          <xsd:element name="item" type="tns:IssueData" minOccurs="0" maxOccurs="unbounded"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="ArrayOfNoteData">
+        <xsd:sequence>
+          <xsd:element name="item" type="tns:NoteData" minOccurs="0" maxOccurs="unbounded"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <!-- request / response wrappers (document/literal wrapped style) -->
+      <xsd:element name="mc_version">
+        <xsd:complexType><xsd:sequence/></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_versionResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="xsd:string"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:complexType name="Credentials">
+        <xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:element name="mc_login">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_loginResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="tns:UserData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_projects_get_user_accessible">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_projects_get_user_accessibleResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="tns:ArrayOfProjectData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_project_get_issues">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+          <xsd:element name="project_id" type="xsd:integer"/>
+          <xsd:element name="page_number" type="xsd:integer"/>
+          <xsd:element name="per_page" type="xsd:integer"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_project_get_issuesResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="tns:ArrayOfIssueData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_issue_get">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+          <xsd:element name="issue_id" type="xsd:integer"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_issue_getResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="tns:IssueData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_issue_add">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+          <xsd:element name="issue" type="tns:IssueData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_issue_addResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="xsd:integer"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_issue_update">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+          <xsd:element name="issue_id" type="xsd:integer"/>
+          <xsd:element name="issue" type="tns:IssueData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_issue_updateResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="xsd:boolean"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_issue_delete">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+          <xsd:element name="issue_id" type="xsd:integer"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_issue_deleteResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="xsd:boolean"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_issue_notes_get">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+          <xsd:element name="issue_id" type="xsd:integer"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_issue_notes_getResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="tns:ArrayOfNoteData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="mc_issue_note_add">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="password" type="xsd:string"/>
+          <xsd:element name="issue_id" type="xsd:integer"/>
+          <xsd:element name="note" type="tns:NoteData"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="mc_issue_note_addResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="return" type="xsd:integer"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+
+    </xsd:schema>
+  </types>
+
+  <message name="mc_versionRequest"><part name="parameters" element="tns:mc_version"/></message>
+  <message name="mc_versionResponse"><part name="parameters" element="tns:mc_versionResponse"/></message>
+  <message name="mc_loginRequest"><part name="parameters" element="tns:mc_login"/></message>
+  <message name="mc_loginResponse"><part name="parameters" element="tns:mc_loginResponse"/></message>
+  <message name="mc_projects_get_user_accessibleRequest"><part name="parameters" element="tns:mc_projects_get_user_accessible"/></message>
+  <message name="mc_projects_get_user_accessibleResponse"><part name="parameters" element="tns:mc_projects_get_user_accessibleResponse"/></message>
+  <message name="mc_project_get_issuesRequest"><part name="parameters" element="tns:mc_project_get_issues"/></message>
+  <message name="mc_project_get_issuesResponse"><part name="parameters" element="tns:mc_project_get_issuesResponse"/></message>
+  <message name="mc_issue_getRequest"><part name="parameters" element="tns:mc_issue_get"/></message>
+  <message name="mc_issue_getResponse"><part name="parameters" element="tns:mc_issue_getResponse"/></message>
+  <message name="mc_issue_addRequest"><part name="parameters" element="tns:mc_issue_add"/></message>
+  <message name="mc_issue_addResponse"><part name="parameters" element="tns:mc_issue_addResponse"/></message>
+  <message name="mc_issue_updateRequest"><part name="parameters" element="tns:mc_issue_update"/></message>
+  <message name="mc_issue_updateResponse"><part name="parameters" element="tns:mc_issue_updateResponse"/></message>
+  <message name="mc_issue_deleteRequest"><part name="parameters" element="tns:mc_issue_delete"/></message>
+  <message name="mc_issue_deleteResponse"><part name="parameters" element="tns:mc_issue_deleteResponse"/></message>
+  <message name="mc_issue_notes_getRequest"><part name="parameters" element="tns:mc_issue_notes_get"/></message>
+  <message name="mc_issue_notes_getResponse"><part name="parameters" element="tns:mc_issue_notes_getResponse"/></message>
+  <message name="mc_issue_note_addRequest"><part name="parameters" element="tns:mc_issue_note_add"/></message>
+  <message name="mc_issue_note_addResponse"><part name="parameters" element="tns:mc_issue_note_addResponse"/></message>
+
+  <portType name="MantisConnectPortType">
+    <operation name="mc_version">
+      <input message="tns:mc_versionRequest"/><output message="tns:mc_versionResponse"/>
+    </operation>
+    <operation name="mc_login">
+      <input message="tns:mc_loginRequest"/><output message="tns:mc_loginResponse"/>
+    </operation>
+    <operation name="mc_projects_get_user_accessible">
+      <input message="tns:mc_projects_get_user_accessibleRequest"/><output message="tns:mc_projects_get_user_accessibleResponse"/>
+    </operation>
+    <operation name="mc_project_get_issues">
+      <input message="tns:mc_project_get_issuesRequest"/><output message="tns:mc_project_get_issuesResponse"/>
+    </operation>
+    <operation name="mc_issue_get">
+      <input message="tns:mc_issue_getRequest"/><output message="tns:mc_issue_getResponse"/>
+    </operation>
+    <operation name="mc_issue_add">
+      <input message="tns:mc_issue_addRequest"/><output message="tns:mc_issue_addResponse"/>
+    </operation>
+    <operation name="mc_issue_update">
+      <input message="tns:mc_issue_updateRequest"/><output message="tns:mc_issue_updateResponse"/>
+    </operation>
+    <operation name="mc_issue_delete">
+      <input message="tns:mc_issue_deleteRequest"/><output message="tns:mc_issue_deleteResponse"/>
+    </operation>
+    <operation name="mc_issue_notes_get">
+      <input message="tns:mc_issue_notes_getRequest"/><output message="tns:mc_issue_notes_getResponse"/>
+    </operation>
+    <operation name="mc_issue_note_add">
+      <input message="tns:mc_issue_note_addRequest"/><output message="tns:mc_issue_note_addResponse"/>
+    </operation>
+  </portType>
+
+  <binding name="MantisConnectBinding" type="tns:MantisConnectPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="mc_version">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_version"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_login">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_login"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_projects_get_user_accessible">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_projects_get_user_accessible"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_project_get_issues">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_project_get_issues"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_issue_get">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_issue_get"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_issue_add">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_issue_add"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_issue_update">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_issue_update"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_issue_delete">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_issue_delete"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_issue_notes_get">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_issue_notes_get"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="mc_issue_note_add">
+      <soap:operation soapAction="http://futureware.biz/mantisconnect/mc_issue_note_add"/>
+      <input><soap:body use="literal"/></input><output><soap:body use="literal"/></output>
+    </operation>
+  </binding>
+
+  <service name="MantisConnectService">
+    <port name="MantisConnectPort" binding="tns:MantisConnectBinding">
+      <soap:address location="http://localhost:8080/api/soap"/>
+    </port>
+  </service>
+
+</definitions>

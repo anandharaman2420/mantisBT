@@ -5,13 +5,45 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
-import { CategoryView, IssueSummary, UserRef } from '../core/models';
+import { BulkBarComponent } from '../shared/bulk-bar.component';
+import { CategoryView, FilterCriteria, IssueQuery, IssueSummary, SavedFilterView, UserRef } from '../core/models';
 
 @Component({
-  selector: 'app-issue-list', standalone: true, imports: [FormsModule, RouterLink, DatePipe],
+  selector: 'app-issue-list', standalone: true, imports: [FormsModule, RouterLink, DatePipe, BulkBarComponent],
   template: `
   <h1>View Issues <span class="muted">({{ total }})</span></h1>
   <div class="panel">
+    <div class="row" style="align-items:center;margin-bottom:12px;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="margin:0;font-weight:600">Saved filters:</label>
+        <select [ngModel]="selectedFilterId" (ngModelChange)="onSelectSavedFilter($event)" style="min-width:180px">
+          <option [ngValue]="null">– Custom filter –</option>
+          @for (f of savedFilters; track f.id) {
+            <option [ngValue]="f.id">{{ f.name }}{{ f.isPublic ? ' (shared)' : '' }}{{ f.projectName ? ' [' + f.projectName + ']' : '' }}</option>
+          }
+        </select>
+        <button class="small" (click)="toggleSaveDialog()">{{ showSaveDialog ? 'Cancel' : 'Save filter…' }}</button>
+        @if (selectedFilter && canDeleteSelectedFilter()) {
+          <button class="small danger" (click)="deleteCurrentFilter()">Delete filter</button>
+        }
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="small" (click)="export('csv')" [disabled]="exporting">📥 Export CSV</button>
+        <button class="small" (click)="export('excel')" [disabled]="exporting">📊 Export Excel</button>
+      </div>
+    </div>
+
+    @if (showSaveDialog) {
+      <div class="row" style="align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:#ebf8ff;border:1px solid #bee3f8;border-radius:4px;flex-wrap:wrap">
+        <div class="grow" style="min-width:180px"><label style="margin:0 0 2px 0;font-size:12px">Filter name</label><input [(ngModel)]="newFilterName" placeholder="e.g. High Priority Open"></div>
+        <label style="display:flex;gap:5px;align-items:center;font-weight:400;margin-top:16px"><input type="checkbox" [(ngModel)]="newFilterPublic"> Public (shared)</label>
+        <div style="margin-top:16px">
+          <button class="primary small" (click)="saveFilter()" [disabled]="!newFilterName.trim()">Save</button>
+          <button class="small" (click)="showSaveDialog = false">Cancel</button>
+        </div>
+      </div>
+    }
+
     <div class="row">
       <div class="grow" style="min-width:220px"><label>Search (summary, description, id)</label><input [(ngModel)]="q" (keyup.enter)="reload()" placeholder="Search…"></div>
       <div><label>Status</label><select [(ngModel)]="status"><option [ngValue]="null">any</option>
@@ -31,9 +63,14 @@ import { CategoryView, IssueSummary, UserRef } from '../core/models';
     </div>
   </div>
   @if (error) { <div class="err">{{ error }}</div> }
+  @if (selectedIds.length) {
+    <app-bulk-bar [ids]="selectedIds" [projectId]="auth.projectId()" [categories]="categories" [handlers]="handlers"
+                  (done)="load()" (cleared)="selectedIds = []" />
+  }
   <div class="panel" style="padding:0;overflow:auto">
     <table>
       <thead><tr>
+        <th style="width:28px"><input type="checkbox" [checked]="allSelected()" (change)="toggleAll()" title="select all on this page"></th>
         <th class="sortable" (click)="sort('id')">ID{{ arrow('id') }}</th>
         @if (!auth.projectId()) { <th>Project</th> }
         <th>Category</th>
@@ -47,6 +84,7 @@ import { CategoryView, IssueSummary, UserRef } from '../core/models';
       <tbody>
         @for (i of items; track i.id) {
           <tr class="clickable" [routerLink]="['/issues', i.id]">
+            <td (click)="$event.stopPropagation()"><input type="checkbox" [checked]="isSel(i.id)" (change)="toggle(i.id)"></td>
             <td class="nowrap"><a [routerLink]="['/issues', i.id]">{{ i.id.toString().padStart(7, '0') }}</a> @if (i.viewState === 50) { 🔒 }</td>
             @if (!auth.projectId()) { <td>{{ i.projectName }}</td> }
             <td>{{ i.category }}</td>
@@ -57,7 +95,7 @@ import { CategoryView, IssueSummary, UserRef } from '../core/models';
             <td>{{ i.summary }}</td>
             <td>{{ i.handler?.username }}</td>
           </tr>
-        } @empty { <tr><td colspan="9" class="muted">No issues match the filter.</td></tr> }
+        } @empty { <tr><td colspan="10" class="muted">No issues match the filter.</td></tr> }
       </tbody>
     </table>
   </div>
@@ -78,7 +116,30 @@ export class IssueListComponent {
   sortBy = 'lastUpdated'; dir = 'desc';
   categories: CategoryView[] = []; handlers: UserRef[] = [];
 
+  savedFilters: SavedFilterView[] = [];
+  selectedFilterId: number | null = null;
+  showSaveDialog = false;
+  newFilterName = '';
+  newFilterPublic = false;
+  exporting = false;
+  /** ids ticked in the first column (bulk actions) */
+  selectedIds: number[] = [];
+  isSel(id: number) { return this.selectedIds.includes(id); }
+  toggle(id: number) { this.selectedIds = this.isSel(id) ? this.selectedIds.filter(x => x !== id) : [...this.selectedIds, id]; }
+  allSelected() { return this.items.length > 0 && this.items.every(i => this.isSel(i.id)); }
+  toggleAll() { this.selectedIds = this.allSelected() ? [] : this.items.map(i => i.id); }
+
   get pages() { return Math.max(1, Math.ceil(this.total / this.size)); }
+
+  get selectedFilter(): SavedFilterView | undefined {
+    return this.savedFilters.find(f => f.id === this.selectedFilterId);
+  }
+
+  canDeleteSelectedFilter(): boolean {
+    const f = this.selectedFilter;
+    if (!f) return false;
+    return this.auth.isAdmin() || f.user.id === this.auth.user()?.id;
+  }
 
   constructor() {
     const qp = this.route.snapshot.queryParamMap;
@@ -92,8 +153,119 @@ export class IssueListComponent {
           this.api.categories(pid).subscribe(c => this.categories = c);
           this.api.assignable(pid).subscribe(u => this.handlers = u);
         }
+        this.loadSavedFilters();
         this.page = 0; this.load();
       });
+    });
+  }
+
+  loadSavedFilters() {
+    this.api.savedFilters(this.auth.projectId()).subscribe({
+      next: fs => this.savedFilters = fs,
+      error: () => {}
+    });
+  }
+
+  onSelectSavedFilter(id: number | null) {
+    this.selectedFilterId = id;
+    if (!id) return;
+    const f = this.savedFilters.find(x => x.id === id);
+    if (!f || !f.criteria) return;
+    const c = f.criteria;
+    this.q = c.q ?? '';
+    this.status = (c.status && c.status.length) ? c.status[0] : null;
+    this.priority = c.priority ?? null;
+    this.severity = c.severity ?? null;
+    this.categoryId = c.categoryId ?? null;
+    this.handlerId = c.handlerId ?? null;
+    this.hideClosed = c.hideClosed ?? true;
+    if (c.sortBy) this.sortBy = c.sortBy;
+    if (c.dir) this.dir = c.dir;
+    this.page = 0;
+    this.load();
+  }
+
+  toggleSaveDialog() {
+    this.showSaveDialog = !this.showSaveDialog;
+    if (this.showSaveDialog && !this.newFilterName) {
+      this.newFilterName = 'Filter ' + new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  saveFilter() {
+    if (!this.newFilterName.trim()) return;
+    const criteria: FilterCriteria = {
+      projectId: this.auth.projectId(),
+      status: this.status !== null ? [this.status] : [],
+      handlerId: this.handlerId,
+      priority: this.priority,
+      severity: this.severity,
+      categoryId: this.categoryId,
+      q: this.q,
+      hideClosed: this.hideClosed,
+      sortBy: this.sortBy,
+      dir: this.dir
+    };
+    this.api.createFilter({
+      name: this.newFilterName.trim(),
+      projectId: this.auth.projectId(),
+      isPublic: this.newFilterPublic,
+      criteria
+    }).subscribe({
+      next: saved => {
+        this.showSaveDialog = false;
+        this.newFilterName = '';
+        this.newFilterPublic = false;
+        this.selectedFilterId = saved.id;
+        this.loadSavedFilters();
+      },
+      error: e => this.error = errMsg(e)
+    });
+  }
+
+  deleteCurrentFilter() {
+    if (!this.selectedFilterId) return;
+    if (!confirm('Delete saved filter "' + (this.selectedFilter?.name || '') + '"?')) return;
+    this.api.deleteFilter(this.selectedFilterId).subscribe({
+      next: () => {
+        this.selectedFilterId = null;
+        this.loadSavedFilters();
+      },
+      error: e => this.error = errMsg(e)
+    });
+  }
+
+  export(type: 'csv' | 'excel') {
+    this.exporting = true;
+    const q: IssueQuery = {
+      projectId: this.auth.projectId(),
+      status: this.status !== null ? [this.status] : [],
+      handlerId: this.handlerId,
+      priority: this.priority,
+      severity: this.severity,
+      categoryId: this.categoryId,
+      q: this.q,
+      hideClosed: this.hideClosed,
+      sortBy: this.sortBy,
+      dir: this.dir
+    };
+    const call = type === 'csv' ? this.api.exportCsv(q) : this.api.exportExcel(q);
+    call.subscribe({
+      next: blob => {
+        this.exporting = false;
+        const ext = type === 'csv' ? 'csv' : 'xls';
+        const filename = `issues_${new Date().toISOString().slice(0, 10)}.${ext}`;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: e => {
+        this.exporting = false;
+        this.error = errMsg(e);
+      }
     });
   }
 
@@ -103,11 +275,16 @@ export class IssueListComponent {
       priority: this.priority, severity: this.severity, categoryId: this.categoryId, q: this.q,
       hideClosed: this.hideClosed, sortBy: this.sortBy, dir: this.dir, page: this.page, size: this.size
     }).subscribe({
-      next: r => { this.items = r.items; this.total = r.total; this.error = ''; }, error: e => this.error = errMsg(e)
+      next: r => { this.items = r.items; this.total = r.total; this.error = ''; this.selectedIds = []; }, error: e => this.error = errMsg(e)
     });
   }
   reload() { this.page = 0; this.load(); }
-  reset() { this.q = ''; this.status = this.priority = this.severity = this.categoryId = this.handlerId = null; this.hideClosed = true; this.reload(); }
+  reset() {
+    this.selectedFilterId = null;
+    this.q = ''; this.status = this.priority = this.severity = this.categoryId = this.handlerId = null;
+    this.hideClosed = true;
+    this.reload();
+  }
   go(p: number) { this.page = Math.max(0, p); this.load(); }
   sort(f: string) { if (this.sortBy === f) this.dir = this.dir === 'asc' ? 'desc' : 'asc'; else { this.sortBy = f; this.dir = 'desc'; } this.reload(); }
   arrow(f: string) { return this.sortBy === f ? (this.dir === 'asc' ? ' ▲' : ' ▼') : ''; }

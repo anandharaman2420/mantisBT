@@ -36,14 +36,21 @@ public class IssueService {
     private final RelationshipRepository relationships;
     private final AccessService access;
     private final HistoryService history;
+    private final NotificationService notifier;
+    private final boolean trackTime;
+    private final CustomFieldService customFields;
+    private final CustomFieldValueRepository fieldValues;
 
     public IssueService(IssueRepository issues, CategoryRepository categories, UserRepository users, TagRepository tags,
                         NoteRepository notes, AttachmentRepository attachments, HistoryRepository historyRepo,
                         MonitorRepository monitors, RelationshipRepository relationships, AccessService access,
-                        HistoryService history) {
+                        HistoryService history, NotificationService notifier,
+                        CustomFieldService customFields, CustomFieldValueRepository fieldValues,
+                        @org.springframework.beans.factory.annotation.Value("${app.time-tracking.enabled}") boolean trackTime) {
         this.issues = issues; this.categories = categories; this.users = users; this.tags = tags;
         this.notes = notes; this.attachments = attachments; this.historyRepo = historyRepo; this.monitors = monitors;
-        this.relationships = relationships; this.access = access; this.history = history;
+        this.relationships = relationships; this.access = access; this.history = history; this.notifier = notifier;
+        this.customFields = customFields; this.fieldValues = fieldValues; this.trackTime = trackTime;
     }
 
     // ------------------------------------------------------------------ errors
@@ -52,15 +59,7 @@ public class IssueService {
     static ResponseStatusException notFound() { return new ResponseStatusException(HttpStatus.NOT_FOUND, "Issue not found"); }
 
     // ------------------------------------------------------------------ visibility
-    public boolean canSee(User me, Issue i) {
-        int lvl = access.levelIn(me, i.getProject());
-        if (lvl < Lookups.VIEWER) return false;
-        if (i.getViewState() == Lookups.VS_PRIVATE) {
-            return lvl >= Lookups.DEVELOPER || i.getReporter().getId().equals(me.getId())
-                    || (i.getHandler() != null && i.getHandler().getId().equals(me.getId()));
-        }
-        return true;
-    }
+    public boolean canSee(User me, Issue i) { return access.canSee(me, i); }
 
     /** 404 (not 403) for invisible issues so that ids cannot be probed. */
     public Issue getVisible(User me, Long id) {
@@ -69,23 +68,51 @@ public class IssueService {
         return i;
     }
 
+    /** Visibility check + DTO mapping in one transaction (used by the REST/SOAP compatibility layer). */
+    @Transactional(readOnly = true)
+    public IssueView viewById(User me, Long id) {
+        return view(me, getVisible(me, id));
+    }
+
+    /** Search that maps to DTOs inside the transaction (used by the REST compatibility layer). */
+    @Transactional(readOnly = true)
+    public Page<IssueView> searchViews(User me, Filter f, Pageable pg) {
+        return search(me, f, pg).map(i -> view(me, i));
+    }
+
     // ------------------------------------------------------------------ search (view_all_bug_page / filter_api)
     public record Filter(Long projectId, List<Integer> status, Long handlerId, Long reporterId, Integer priority,
                          Integer severity, Long categoryId, String search, boolean hideClosed, String tag) {}
 
     @Transactional(readOnly = true)
     public Page<Issue> search(User me, Filter f, Pageable pg) {
+        Specification<Issue> spec = buildSpecification(me, f);
+        if (spec == null) return Page.empty(pg);
+        return issues.findAll(spec, pg);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Issue> searchAll(User me, Filter f, org.springframework.data.domain.Sort sort) {
+        Specification<Issue> spec = buildSpecification(me, f);
+        if (spec == null) return List.of();
+        return issues.findAll(spec, sort);
+    }
+
+    private Specification<Issue> buildSpecification(User me, Filter f) {
         Map<Long, Integer> levels = access.levels(me);
-        if (f.projectId() != null && !levels.containsKey(f.projectId())) return Page.empty(pg);
-        if (levels.isEmpty()) return Page.empty(pg);
+        if (f.projectId() != null && !levels.containsKey(f.projectId())) return null;
+        if (levels.isEmpty()) return null;
         Set<Long> devProjects = levels.entrySet().stream().filter(e -> e.getValue() >= Lookups.DEVELOPER)
                 .map(Map.Entry::getKey).collect(Collectors.toSet());
+        // selecting a project also shows the issues of its sub-projects (that the user may see)
+        final Set<Long> scope = f.projectId() == null ? levels.keySet() : new HashSet<>(access.subtreeIds(f.projectId()));
+        if (f.projectId() != null) scope.retainAll(levels.keySet());
 
-        Specification<Issue> spec = (root, q, cb) -> {
+        return (root, q, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             Join<Issue, User> handlerJoin = root.join("handler", JoinType.LEFT);   // handler may be NULL
             Path<Long> pid = root.get("project").get("id");
-            ps.add(f.projectId() != null ? cb.equal(pid, f.projectId()) : pid.in(levels.keySet()));
+            ps.add(pid.in(scope));
 
             // private issues: reporter, handler, or developer+ in that project
             List<Predicate> vis = new ArrayList<>();
@@ -120,7 +147,6 @@ public class IssueService {
             if (f.tag() != null && !f.tag().isBlank()) q.distinct(true);
             return cb.and(ps.toArray(new Predicate[0]));
         };
-        return issues.findAll(spec, pg);
     }
 
     // ------------------------------------------------------------------ view
@@ -144,7 +170,9 @@ public class IssueService {
                 i.getFixedInVersion(), i.getTargetVersion(), i.getBuild(), i.getViewState(), i.isSticky(),
                 i.getDateSubmitted(), i.getLastUpdated(), tagNames, monitorRefs, monitoring,
                 canUpdate, lvl >= Lookups.DEVELOPER, lvl >= Lookups.DEVELOPER,
-                lvl >= Lookups.REPORTER && (!readonly || lvl >= Lookups.MANAGER), lvl >= Lookups.REPORTER);
+                lvl >= Lookups.REPORTER && (!readonly || lvl >= Lookups.MANAGER), lvl >= Lookups.REPORTER,
+                customFields.forIssue(i, lvl),
+                trackTime && lvl >= Lookups.DEVELOPER ? (int) notes.sumMinutes(i.getId()) : 0);
     }
 
     // ------------------------------------------------------------------ create (bug_report.php / bug_api bug_create)
@@ -190,11 +218,24 @@ public class IssueService {
         issues.save(i);
         history.log(me, i, "", null, null, Lookups.H_NEW_BUG);
         if (f.tags() != null) syncTags(me, i, f.tags(), false);
+        customFields.apply(me, i, f.customFields(), true, lvl);
+        notifier.issueCreated(me, i);
         return i;
     }
 
     // ------------------------------------------------------------------ update (bug_update.php)
     public Issue update(User me, Long id, IssueForm f) {
+        history.begin();
+        try {
+            Issue i = doUpdate(me, id, f);
+            notifier.issueUpdated(me, i, history.changes(), null);
+            return i;
+        } finally {
+            history.end();
+        }
+    }
+
+    private Issue doUpdate(User me, Long id, IssueForm f) {
         Issue i = getVisible(me, id);
         Project p = i.getProject();
         int lvl = access.require(me, p, Lookups.UPDATER);
@@ -218,6 +259,11 @@ public class IssueService {
         upd(me, i, "build", i.getBuild(), f.build(), i::setBuild);
         upd(me, i, "view_state", i.getViewState(), f.viewState() == null ? null : valid(Lookups.VIEW_STATE, f.viewState(), "viewState"), i::setViewState);
 
+        // Empty version values mean "clear" in bulk and move/copy-style update forms.
+        // Null means unchanged, so normalize only non-null values after the DTO is mapped.
+        String fixedInVersion = f.fixedInVersion() == null ? null : (f.fixedInVersion().trim().isEmpty() ? null : f.fixedInVersion().trim());
+        String targetVersion = f.targetVersion() == null ? null : (f.targetVersion().trim().isEmpty() ? null : f.targetVersion().trim());
+
         if (f.categoryId() != null) {
             Long old = i.getCategory() == null ? null : i.getCategory().getId();
             if (!f.categoryId().equals(old)) {
@@ -228,8 +274,10 @@ public class IssueService {
         }
         // developer-only fields
         boolean devFieldTouched =
-                (f.fixedInVersion() != null && !f.fixedInVersion().equals(i.getFixedInVersion()))
-                || (f.targetVersion() != null && !f.targetVersion().equals(i.getTargetVersion()))
+                (fixedInVersion != null && !fixedInVersion.equals(i.getFixedInVersion()))
+                || (f.fixedInVersion() != null && fixedInVersion == null && i.getFixedInVersion() != null)
+                || (targetVersion != null && !targetVersion.equals(i.getTargetVersion()))
+                || (f.targetVersion() != null && targetVersion == null && i.getTargetVersion() != null)
                 || (f.sticky() != null && f.sticky() != i.isSticky())
                 || (f.status() != null && f.status() != i.getStatus())
                 || (f.resolution() != null && f.resolution() != i.getResolution())
@@ -241,8 +289,8 @@ public class IssueService {
                 // reporters-with-update rights may only touch nothing here; sticky needs manager
                 throw denied();
             }
-            upd(me, i, "fixed_in_version", i.getFixedInVersion(), f.fixedInVersion(), i::setFixedInVersion);
-            upd(me, i, "target_version", i.getTargetVersion(), f.targetVersion(), i::setTargetVersion);
+            upd(me, i, "fixed_in_version", i.getFixedInVersion(), fixedInVersion, i::setFixedInVersion);
+            upd(me, i, "target_version", i.getTargetVersion(), targetVersion, i::setTargetVersion);
             if (f.sticky() != null) {
                 if (lvl < Lookups.MANAGER) throw denied();
                 upd(me, i, "sticky", i.isSticky(), f.sticky(), i::setSticky);
@@ -264,14 +312,28 @@ public class IssueService {
             if (lvl < Lookups.UPDATER) throw denied();
             syncTags(me, i, f.tags(), true);
         }
+        customFields.apply(me, i, f.customFields(), false, lvl);
         i.setLastUpdated(Instant.now());
         return issues.save(i);
     }
 
     /** bug_api "change status" + assign: status, resolution, handler rules in one place. */
     public Issue changeStatus(User me, Long id, StatusChange c) {
+        history.begin();
+        try {
+            Issue i = doChangeStatus(me, id, c);
+            notifier.issueUpdated(me, i, history.changes(), c.note());
+            return i;
+        } finally {
+            history.end();
+        }
+    }
+
+    private Issue doChangeStatus(User me, Long id, StatusChange c) {
         Issue i = getVisible(me, id);
         int lvl = access.require(me, i.getProject(), Lookups.DEVELOPER);
+        if (i.getStatus() >= Lookups.RESOLVED && lvl < Lookups.MANAGER)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Issue is read-only (resolved/closed)");
         if (c.duplicateId() != null) {
             Issue dup = issues.findById(c.duplicateId()).orElseThrow(() -> bad("Duplicate issue not found"));
             if (dup.getId().equals(i.getId())) throw bad("An issue cannot be a duplicate of itself");
@@ -332,11 +394,121 @@ public class IssueService {
         }
     }
 
+    // ------------------------------------------------------------------ move / copy (bug_move / bug_copy)
+    /** Moves an issue to another project: category is mapped by name, handler is dropped if not a developer there. */
+    public Issue move(User me, Long id, Long targetProjectId) {
+        history.begin();
+        try {
+            Issue i = getVisible(me, id);
+            Project from = i.getProject();
+            Project to = access.projectOrThrow(targetProjectId);
+            if (from.getId().equals(to.getId())) throw bad("The issue is already in this project");
+            int lvl = access.require(me, from, Lookups.DEVELOPER);
+            access.require(me, to, Lookups.REPORTER);
+            if (i.getStatus() >= Lookups.RESOLVED && lvl < Lookups.MANAGER)
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Issue is read-only (resolved/closed)");
+
+            history.log(me, i, "project_id", from.getId(), to.getId());
+            i.setProject(to);
+
+            Category oldCat = i.getCategory();
+            if (oldCat != null) {
+                Category mapped = categoryByName(to, oldCat.getName());
+                history.log(me, i, "category_id", oldCat.getId(), mapped == null ? null : mapped.getId());
+                i.setCategory(mapped);
+            }
+            if (i.getHandler() != null && access.levelIn(i.getHandler(), to) < Lookups.DEVELOPER) {
+                history.log(me, i, "handler_id", i.getHandler().getId(), null);
+                i.setHandler(null);
+                if (i.getStatus() == Lookups.ASSIGNED) {
+                    history.log(me, i, "status", Lookups.ASSIGNED, Lookups.NEW);
+                    i.setStatus(Lookups.NEW);
+                }
+            }
+            customFields.afterMove(i, to);
+            i.setLastUpdated(Instant.now());
+            issues.save(i);
+            notifier.issueUpdated(me, i, history.changes(), null);
+            return i;
+        } finally {
+            history.end();
+        }
+    }
+
+    /** Clones an issue (new id, you are the reporter, status "new", unassigned). Returns the new issue. */
+    public Issue copy(User me, Long id, CopyForm f) {
+        Issue src = getVisible(me, id);
+        Project to = f.projectId() == null ? src.getProject() : access.projectOrThrow(f.projectId());
+        access.require(me, to, Lookups.REPORTER);
+        boolean sameProject = to.getId().equals(src.getProject().getId());
+
+        Issue n = new Issue();
+        n.setProject(to);
+        n.setReporter(me);
+        n.setSummary(src.getSummary());
+        n.setDescription(src.getDescription());
+        n.setStepsToReproduce(src.getStepsToReproduce());
+        n.setAdditionalInformation(src.getAdditionalInformation());
+        n.setPriority(src.getPriority()); n.setSeverity(src.getSeverity()); n.setReproducibility(src.getReproducibility());
+        n.setProjection(src.getProjection()); n.setEta(src.getEta());
+        n.setOs(src.getOs()); n.setOsBuild(src.getOsBuild()); n.setPlatform(src.getPlatform());
+        n.setViewState(src.getViewState());
+        if (sameProject) { n.setVersion(src.getVersion()); n.setBuild(src.getBuild()); n.setTargetVersion(src.getTargetVersion()); }
+        if (src.getCategory() != null) n.setCategory(categoryByName(to, src.getCategory().getName()));
+        n.getTags().addAll(src.getTags());
+        issues.save(n);
+        history.log(me, n, "", null, null, Lookups.H_NEW_BUG);
+        customFields.copyValues(src, n, to);
+
+        int srcLvl = access.levelIn(me, src.getProject());
+        if (Boolean.TRUE.equals(f.copyNotes())) {
+            for (Note o : notes.findByIssueIdOrderByDateSubmittedAsc(src.getId())) {
+                boolean own = o.getReporter().getId().equals(me.getId());
+                if (o.getViewState() == Lookups.VS_PRIVATE && srcLvl < Lookups.DEVELOPER && !own) continue;
+                Note c = new Note();
+                c.setIssue(n); c.setReporter(o.getReporter()); c.setText(o.getText()); c.setViewState(o.getViewState());
+                c.setNoteType(o.getNoteType()); c.setDateSubmitted(o.getDateSubmitted()); c.setLastModified(o.getLastModified());
+                notes.save(c);
+            }
+        }
+        if (Boolean.TRUE.equals(f.copyAttachments())) {
+            for (Attachment o : attachments.findByIssueId(src.getId())) {
+                Attachment c = new Attachment();
+                c.setIssue(n); c.setUser(o.getUser()); c.setTitle(o.getTitle()); c.setDescription(o.getDescription());
+                c.setFilename(o.getFilename()); c.setFilesize(o.getFilesize()); c.setFileType(o.getFileType());
+                c.setDateAdded(o.getDateAdded()); c.setContent(o.getContent());
+                attachments.save(c);
+            }
+        }
+        if (f.linkToOriginal() == null || f.linkToOriginal()) {
+            IssueRelationship r = new IssueRelationship();
+            r.setSource(n); r.setDestination(src); r.setRelationshipType(1);     // related to
+            relationships.save(r);
+            history.log(me, n, "", null, src.getId() + ":" + Lookups.label(Lookups.RELATIONSHIP, 1), Lookups.H_REL_ADDED);
+            history.log(me, src, "", null, n.getId() + ":" + Lookups.label(Lookups.RELATIONSHIP, 1), Lookups.H_REL_ADDED);
+        }
+        notifier.issueCreated(me, n);
+        return n;
+    }
+
+    /** category with this name in the project or (inherited) in its parent projects; null if none */
+    public Category categoryByName(Project p, String name) {
+        List<Project> chain = new ArrayList<>(List.of(p));
+        chain.addAll(access.inheritedAncestors(p));
+        for (Project x : chain) {
+            Category c = categories.findByProjectIdOrderByName(x.getId()).stream()
+                    .filter(k -> k.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
+            if (c != null) return c;
+        }
+        return null;
+    }
+
     // ------------------------------------------------------------------ delete
     public void delete(User me, Long id) {
         Issue i = getVisible(me, id);
         access.require(me, i.getProject(), Lookups.DEVELOPER);           // delete_bug_threshold
         relationships.deleteAllFor(i.getId());
+        fieldValues.deleteByIssueId(i.getId());
         notes.deleteByIssueId(i.getId());
         attachments.deleteByIssueId(i.getId());
         monitors.deleteByIssueId(i.getId());
@@ -349,8 +521,11 @@ public class IssueService {
     @Transactional(readOnly = true)
     public SummaryView summary(User me, Long projectId) {
         Map<Long, Integer> levels = access.levels(me);
-        Set<Long> ids = projectId != null ? (levels.containsKey(projectId) ? Set.of(projectId) : Set.of())
-                : levels.keySet();
+        Set<Long> ids = levels.keySet();
+        if (projectId != null) {
+            ids = new HashSet<>(levels.containsKey(projectId) ? access.subtreeIds(projectId) : Set.of());
+            ids.retainAll(levels.keySet());
+        }
         if (ids.isEmpty()) return new SummaryView(0, List.of(), List.of(), List.of(), 0, 0);
         List<CountEntry> st = counts(issues.countByStatus(ids), Lookups.STATUS);
         long total = st.stream().mapToLong(CountEntry::count).sum();
@@ -375,8 +550,14 @@ public class IssueService {
 
     private Category categoryOf(Project p, Long categoryId) {
         Category c = categories.findById(categoryId).orElseThrow(() -> bad("Category not found"));
-        if (!c.getProject().getId().equals(p.getId())) throw bad("Category does not belong to this project");
+        if (!categoryUsable(p, c)) throw bad("Category does not belong to this project");
         return c;
+    }
+
+    /** a category is usable in a project if it belongs to it or to a parent project it inherits from */
+    public boolean categoryUsable(Project p, Category c) {
+        Long owner = c.getProject().getId();
+        return owner.equals(p.getId()) || access.inheritedAncestors(p).stream().anyMatch(a -> a.getId().equals(owner));
     }
 
     private User handlerFor(Project p, Long userId) {
