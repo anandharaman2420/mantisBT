@@ -22,6 +22,29 @@ export class AuthService {
   isAdmin = computed(() => (this.user()?.accessLevel ?? 0) >= 90);
   /** manager in at least one project (may open the time report) */
   isManager = computed(() => this.projects().some(p => p.myAccess >= 70));
+  /** projects as an indented tree (parents first, sub-projects below) for dropdowns */
+  projectOptions = computed(() => {
+    const list = this.projects();
+    const known = new Set(list.map(p => p.id));
+    const kids = new Map<number | null, ProjectView[]>();
+    for (const p of list) {
+      const key = p.parentId !== null && known.has(p.parentId) ? p.parentId : null;   // parent not visible -> show as top level
+      if (!kids.has(key)) kids.set(key, []);
+      kids.get(key)!.push(p);
+    }
+    const out: { project: ProjectView; depth: number; label: string }[] = [];
+    const seen = new Set<number>();
+    const walk = (parent: number | null, depth: number) => {
+      for (const p of kids.get(parent) ?? []) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        out.push({ project: p, depth, label: '\u00A0\u00A0'.repeat(depth) + (depth ? '└ ' : '') + p.name });
+        walk(p.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return out;
+  });
   currentProject = computed(() => this.projects().find(p => p.id === this.projectId()) ?? null);
 
   get token(): string | null { return localStorage.getItem(TOKEN_KEY); }

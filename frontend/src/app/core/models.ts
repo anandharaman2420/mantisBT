@@ -3,9 +3,9 @@ export interface UserView { id: number; username: string; realname: string; emai
   enabled: boolean; protectedUser: boolean; dateCreated: string; lastVisit: string | null; emailEnabled: boolean; }
 export interface LoginResponse { token: string; user: UserView; }
 export interface ProjectView { id: number; name: string; status: number; enabled: boolean; viewState: number;
-  description: string; myAccess: number; }
-export interface CategoryView { id: number; name: string; defaultHandlerId: number | null; defaultHandlerName: string | null; }
-export interface VersionView { id: number; version: string; description: string; released: boolean; obsolete: boolean; dateOrder: string; }
+  description: string; myAccess: number; parentId: number | null; inheritParent: boolean; }
+export interface CategoryView { id: number; name: string; defaultHandlerId: number | null; defaultHandlerName: string | null; inherited: boolean; }
+export interface VersionView { id: number; version: string; description: string; released: boolean; obsolete: boolean; dateOrder: string; inherited: boolean; }
 export interface MemberView { userId: number; username: string; realname: string; accessLevel: number; }
 export interface TagView { id: number; name: string; description: string; }
 export interface IssueSummary { id: number; projectId: number; projectName: string; summary: string; status: number;

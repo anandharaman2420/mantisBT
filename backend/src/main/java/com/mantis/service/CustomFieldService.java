@@ -21,12 +21,24 @@ import java.util.stream.Collectors;
 public class CustomFieldService {
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
+    private final AccessService access;
     private final CustomFieldProjectRepository links;
     private final CustomFieldValueRepository values;
     private final HistoryService history;
 
-    public CustomFieldService(CustomFieldProjectRepository links, CustomFieldValueRepository values, HistoryService history) {
-        this.links = links; this.values = values; this.history = history;
+    public CustomFieldService(CustomFieldProjectRepository links, CustomFieldValueRepository values, HistoryService history,
+                              AccessService access) {
+        this.links = links; this.values = values; this.history = history; this.access = access;
+    }
+
+    /** field links that apply to a project: its own plus those of the parent projects it inherits from (no duplicates) */
+    public List<CustomFieldProject> effectiveLinks(Project p) {
+        List<CustomFieldProject> out = new ArrayList<>(links.findByProjectIdOrderBySequenceAscIdAsc(p.getId()));
+        Set<Long> have = out.stream().map(l -> l.getField().getId()).collect(Collectors.toSet());
+        for (Project a : access.inheritedAncestors(p))
+            for (CustomFieldProject l : links.findByProjectIdOrderBySequenceAscIdAsc(a.getId()))
+                if (have.add(l.getField().getId())) out.add(l);
+        return out;
     }
 
     private static ResponseStatusException bad(String m) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, m); }
@@ -54,7 +66,7 @@ public class CustomFieldService {
         Map<Long, String> vals = values.findByIssueId(i.getId()).stream()
                 .collect(Collectors.toMap(v -> v.getField().getId(), CustomFieldValue::getValue, (a, b) -> a));
         List<IssueFieldValue> out = new ArrayList<>();
-        for (CustomFieldProject l : links.findByProjectIdOrderBySequenceAscIdAsc(i.getProject().getId())) {
+        for (CustomFieldProject l : effectiveLinks(i.getProject())) {
             CustomField f = l.getField();
             if (lvl < f.getAccessLevelR()) continue;
             out.add(new IssueFieldValue(f.getId(), f.getName(), f.getType(), vals.getOrDefault(f.getId(), ""),
@@ -67,7 +79,7 @@ public class CustomFieldService {
     @Transactional(readOnly = true)
     public List<IssueFieldValue> forReport(Project p, int lvl) {
         List<IssueFieldValue> out = new ArrayList<>();
-        for (CustomFieldProject l : links.findByProjectIdOrderBySequenceAscIdAsc(p.getId())) {
+        for (CustomFieldProject l : effectiveLinks(p)) {
             CustomField f = l.getField();
             if (!f.isDisplayReport() || lvl < f.getAccessLevelRw()) continue;
             out.add(new IssueFieldValue(f.getId(), f.getName(), f.getType(), f.getDefaultValue() == null ? "" : f.getDefaultValue(),
@@ -78,7 +90,7 @@ public class CustomFieldService {
 
     /** after an issue moved to another project: drop values of fields that project does not use */
     public void afterMove(Issue i, Project to) {
-        Set<Long> linked = links.findByProjectIdOrderBySequenceAscIdAsc(to.getId()).stream()
+        Set<Long> linked = effectiveLinks(to).stream()
                 .map(l -> l.getField().getId()).collect(Collectors.toSet());
         for (CustomFieldValue v : values.findByIssueId(i.getId()))
             if (!linked.contains(v.getField().getId())) values.delete(v);
@@ -86,7 +98,7 @@ public class CustomFieldService {
 
     /** copy the values of src to dst (only for fields that the target project uses) */
     public void copyValues(Issue src, Issue dst, Project to) {
-        Set<Long> linked = links.findByProjectIdOrderBySequenceAscIdAsc(to.getId()).stream()
+        Set<Long> linked = effectiveLinks(to).stream()
                 .map(l -> l.getField().getId()).collect(Collectors.toSet());
         for (CustomFieldValue v : values.findByIssueId(src.getId())) {
             if (!linked.contains(v.getField().getId())) continue;
@@ -102,7 +114,7 @@ public class CustomFieldService {
      * @param input fieldId -> value (may be null); only fields linked to the project and writable by the user are touched
      */
     public void apply(User me, Issue i, Map<Long, String> input, boolean creating, int lvl) {
-        List<CustomFieldProject> ls = links.findByProjectIdOrderBySequenceAscIdAsc(i.getProject().getId());
+        List<CustomFieldProject> ls = effectiveLinks(i.getProject());
         if (ls.isEmpty()) return;
         Map<Long, CustomFieldValue> existing = values.findByIssueId(i.getId()).stream()
                 .collect(Collectors.toMap(v -> v.getField().getId(), v -> v, (a, b) -> a));

@@ -92,8 +92,21 @@ Developers can log time spent on a note (`1:30`, `90`, `1.5h`); the issue shows 
 (per project and period, totals per user, CSV export). Same access rules as Mantis (view / edit: developer, report: manager).
 On by default; `TIME_TRACKING_ENABLED=false` switches it off. The importer copies existing `time_tracking` values.
 
+## Phase 4
+
+### Project hierarchy (sub-projects)
+A project can have a parent (*Manage Projects → Details*, administrator). The project selector shows the tree.
+
+* Selecting a project shows the issues of **its sub-projects too** (list, export, dashboard, saved filters).
+* With *inherit from parent* switched on (default) a sub-project also uses the parent's **categories, versions and
+  custom fields** (shown as "(inherited)", editable only in the parent) and the **access level** a user has in the parent
+  (so members of a private parent can see its sub-projects).
+* Cycles are rejected; a project with sub-projects cannot be deleted.
+* One parent per project (Mantis allowed several; the importer keeps the first and reports the others).
+* `tools/import_mantis.py` reads `project_hierarchy` and sets parent + inherit flag.
+
 ### Still open
-Project hierarchy (sub-projects), SOAP/REST compatibility, localisation.
+SOAP/REST compatibility, localisation.
 
 ## Important notes
 * Existing databases: new columns/tables are added by `ddl-auto=update`; new columns carry DDL defaults so existing rows stay valid.

@@ -92,12 +92,15 @@ public class IssueService {
         if (levels.isEmpty()) return null;
         Set<Long> devProjects = levels.entrySet().stream().filter(e -> e.getValue() >= Lookups.DEVELOPER)
                 .map(Map.Entry::getKey).collect(Collectors.toSet());
+        // selecting a project also shows the issues of its sub-projects (that the user may see)
+        final Set<Long> scope = f.projectId() == null ? levels.keySet() : new HashSet<>(access.subtreeIds(f.projectId()));
+        if (f.projectId() != null) scope.retainAll(levels.keySet());
 
         return (root, q, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             Join<Issue, User> handlerJoin = root.join("handler", JoinType.LEFT);   // handler may be NULL
             Path<Long> pid = root.get("project").get("id");
-            ps.add(f.projectId() != null ? cb.equal(pid, f.projectId()) : pid.in(levels.keySet()));
+            ps.add(pid.in(scope));
 
             // private issues: reporter, handler, or developer+ in that project
             List<Predicate> vis = new ArrayList<>();
@@ -467,9 +470,16 @@ public class IssueService {
         return n;
     }
 
-    private Category categoryByName(Project p, String name) {
-        return categories.findByProjectIdOrderByName(p.getId()).stream()
-                .filter(c -> c.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
+    /** category with this name in the project or (inherited) in its parent projects; null if none */
+    public Category categoryByName(Project p, String name) {
+        List<Project> chain = new ArrayList<>(List.of(p));
+        chain.addAll(access.inheritedAncestors(p));
+        for (Project x : chain) {
+            Category c = categories.findByProjectIdOrderByName(x.getId()).stream()
+                    .filter(k -> k.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
+            if (c != null) return c;
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------ delete
@@ -490,8 +500,11 @@ public class IssueService {
     @Transactional(readOnly = true)
     public SummaryView summary(User me, Long projectId) {
         Map<Long, Integer> levels = access.levels(me);
-        Set<Long> ids = projectId != null ? (levels.containsKey(projectId) ? Set.of(projectId) : Set.of())
-                : levels.keySet();
+        Set<Long> ids = levels.keySet();
+        if (projectId != null) {
+            ids = new HashSet<>(levels.containsKey(projectId) ? access.subtreeIds(projectId) : Set.of());
+            ids.retainAll(levels.keySet());
+        }
         if (ids.isEmpty()) return new SummaryView(0, List.of(), List.of(), List.of(), 0, 0);
         List<CountEntry> st = counts(issues.countByStatus(ids), Lookups.STATUS);
         long total = st.stream().mapToLong(CountEntry::count).sum();
@@ -516,8 +529,14 @@ public class IssueService {
 
     private Category categoryOf(Project p, Long categoryId) {
         Category c = categories.findById(categoryId).orElseThrow(() -> bad("Category not found"));
-        if (!c.getProject().getId().equals(p.getId())) throw bad("Category does not belong to this project");
+        if (!categoryUsable(p, c)) throw bad("Category does not belong to this project");
         return c;
+    }
+
+    /** a category is usable in a project if it belongs to it or to a parent project it inherits from */
+    public boolean categoryUsable(Project p, Category c) {
+        Long owner = c.getProject().getId();
+        return owner.equals(p.getId()) || access.inheritedAncestors(p).stream().anyMatch(a -> a.getId().equals(owner));
     }
 
     private User handlerFor(Project p, Long userId) {
