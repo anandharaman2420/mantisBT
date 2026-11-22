@@ -18,7 +18,7 @@ public final class Mapper {
 
     public static ProjectView project(Project p, int myAccess) {
         return new ProjectView(p.getId(), p.getName(), p.getStatus(), p.isEnabled(), p.getViewState(),
-                p.getDescription(), myAccess);
+                p.getDescription(), myAccess, p.getParent() == null ? null : p.getParent().getId(), p.isInheritParent());
     }
 
     public static IssueSummary summary(Issue i) {

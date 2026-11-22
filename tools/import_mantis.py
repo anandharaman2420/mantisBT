@@ -90,6 +90,28 @@ def main():
     # ---- projects
     projects = rows('project', 'id,name,status,enabled,view_state,description')
     project_ids = {p['id'] for p in projects}
+    # ---- sub-projects (this app supports ONE parent per project; Mantis allowed several -> first one is kept)
+    parent_of = {}
+    try:
+        hier = rows('project_hierarchy', 'child_id,parent_id,inherit_parent')
+    except Exception:
+        if hasattr(src, 'rollback'): src.rollback()
+        hier = []
+    for r in hier:
+        c, par = r['child_id'], r['parent_id']
+        if c not in project_ids or par not in project_ids or c == par: continue
+        if c in parent_of: W('project with several parents (first kept)', f'project {c}'); continue
+        parent_of[c] = (par, b(r['inherit_parent']))
+    def _cycle(c):
+        seen, cur = {c}, c
+        while cur in parent_of:
+            cur = parent_of[cur][0]
+            if cur in seen: return True
+            seen.add(cur)
+        return False
+    for c in list(parent_of):
+        if c in parent_of and _cycle(c):
+            W('project hierarchy cycle removed', f'project {c}'); del parent_of[c]
     pu = [r for r in rows('project_user_list', 'project_id,user_id,access_level')
           if r['project_id'] in project_ids and r['user_id'] in user_ids]
 
@@ -201,7 +223,7 @@ def main():
 
     # ---------------------------------------------------------------- report
     print('\n=== SOURCE REPORT ===')
-    for k, v in [('users', len(users)), ('projects', len(projects)), ('project members', len(pu)),
+    for k, v in [('users', len(users)), ('projects', len(projects)), ('sub-projects', len(parent_of)), ('project members', len(pu)),
                  ('categories (after copying global ones)', len(cat_rows)), ('versions', len(versions)), ('tags', len(tags)),
                  ('issues', len(issues)), ('issue-tag links', len(bug_tags)), ('notes', len(notes_out)),
                  ('monitors', len(monitors)), ('relationships', len(rels)), ('history rows', len(hist)),
@@ -241,6 +263,9 @@ def main():
           b(u['protected']), i(u['access_level'], 25), i(u['login_count']), ts(u['last_visit']), ts(u['date_created'], EPOCH)) for u in users])
     ins('project', 'id,name,status,enabled,view_state,description',
         [(p['id'], s(p['name'], 128), i(p['status'], 10), b(p['enabled']), i(p['view_state'], 10), s(p['description'])) for p in projects])
+    for child, (par, inh) in parent_of.items():
+        dc.execute(f'UPDATE {full("project")} SET parent_id = %s, inherit_parent = %s WHERE id = %s', (par, inh, child))
+    print(f'  linked {len(parent_of):7d}  sub-projects')
     seen_cf = set(); cf_rows = []
     for c in cfields:
         n = s(c['name'], 64)

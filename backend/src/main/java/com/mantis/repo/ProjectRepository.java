@@ -6,5 +6,6 @@ import java.util.List;
 
 public interface ProjectRepository extends JpaRepository<Project, Long> {
     boolean existsByName(String name);
+    boolean existsByParentId(Long parentId);
     List<Project> findAllByOrderByName();
 }

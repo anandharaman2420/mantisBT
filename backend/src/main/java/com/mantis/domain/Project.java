@@ -16,4 +16,8 @@ public class Project {
     /** 10 public, 50 private */
     @Column(name = "view_state") private int viewState = 10;
     @Column(columnDefinition = "text") private String description = "";
+    /** sub-project support: NULL = top level project */
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "parent_id") private Project parent;
+    /** inherit categories, versions, custom fields and access levels from the parent (DDL default keeps old rows valid) */
+    @Column(name = "inherit_parent", columnDefinition = "boolean default true") private boolean inheritParent = true;
 }

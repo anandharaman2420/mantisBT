@@ -19,7 +19,7 @@ import { CfInputComponent } from '../shared/cf-input.component';
         <div class="m"><label>Project *</label>
           <select [(ngModel)]="m.projectId" (ngModelChange)="projectChanged()" [disabled]="editing">
             <option [ngValue]="null">– select –</option>
-            @for (p of auth.projects(); track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+            @for (o of auth.projectOptions(); track o.project.id) { <option [ngValue]="o.project.id">{{ o.label }}</option> }
           </select></div>
         <div class="m"><label>Category</label>
           <select [(ngModel)]="m.categoryId"><option [ngValue]="null">– none –</option>

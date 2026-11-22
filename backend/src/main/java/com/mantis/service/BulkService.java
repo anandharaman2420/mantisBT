@@ -99,9 +99,8 @@ public class BulkService {
                 // the chosen category belongs to one project; other projects get the category with the same name
                 Issue i = issues.getVisible(me, id);
                 Category chosen = categories.findById(r.longValue()).orElseThrow(() -> bad("Category not found"));
-                Category target = chosen.getProject().getId().equals(i.getProject().getId()) ? chosen
-                        : categories.findByProjectIdOrderByName(i.getProject().getId()).stream()
-                            .filter(c -> c.getName().equalsIgnoreCase(chosen.getName())).findFirst()
+                Category target = issues.categoryUsable(i.getProject(), chosen) ? chosen
+                        : Optional.ofNullable(issues.categoryByName(i.getProject(), chosen.getName()))
                             .orElseThrow(() -> bad("Category \"" + chosen.getName() + "\" does not exist in project " + i.getProject().getName()));
                 issues.update(me, id, form(Map.of("categoryId", target.getId())));
             }

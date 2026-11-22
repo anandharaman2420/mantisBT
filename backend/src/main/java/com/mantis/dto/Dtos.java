@@ -20,13 +20,14 @@ public final class Dtos {
     public record ChangePassword(@NotBlank String currentPassword, @NotBlank @Size(min = 6) String newPassword) {}
 
     public record ProjectView(Long id, String name, int status, boolean enabled, int viewState,
-                              String description, int myAccess) {}
+                              String description, int myAccess, Long parentId, boolean inheritParent) {}
     public record ProjectForm(@NotBlank @Size(max = 128) String name, Integer status, Boolean enabled,
-                              Integer viewState, String description) {}
-    public record CategoryView(Long id, String name, Long defaultHandlerId, String defaultHandlerName) {}
+                              Integer viewState, String description,
+                              /** parentId: null = unchanged, 0 = make top level */ Long parentId, Boolean inheritParent) {}
+    public record CategoryView(Long id, String name, Long defaultHandlerId, String defaultHandlerName, boolean inherited) {}
     public record CategoryForm(@NotBlank @Size(max = 128) String name, Long defaultHandlerId) {}
     public record VersionView(Long id, String version, String description, boolean released, boolean obsolete,
-                              Instant dateOrder) {}
+                              Instant dateOrder, boolean inherited) {}
     public record VersionForm(@NotBlank @Size(max = 64) String version, String description,
                               Boolean released, Boolean obsolete) {}
     public record MemberView(Long userId, String username, String realname, int accessLevel) {}

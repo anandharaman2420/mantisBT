@@ -66,6 +66,7 @@ public class ProjectController {
         if (projects.existsByName(f.name().trim())) throw new ResponseStatusException(HttpStatus.CONFLICT, "A project with this name already exists");
         Project p = new Project();
         apply(p, f);
+        applyHierarchy(me, p, f);
         p.setName(f.name().trim());
         projects.save(p);
         Category c = new Category();
@@ -82,6 +83,7 @@ public class ProjectController {
         if (!p.getName().equals(f.name().trim()) && projects.existsByName(f.name().trim()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A project with this name already exists");
         apply(p, f);
+        applyHierarchy(me, p, f);
         p.setName(f.name().trim());
         return Mapper.project(p, lvl);
     }
@@ -91,6 +93,7 @@ public class ProjectController {
         access.requireAdmin(current.get());
         Project p = access.projectOrThrow(id);
         if (issues.countByProjectId(id) > 0) throw bad("Project still has issues. Disable it instead of deleting.");
+        if (projects.existsByParentId(id)) throw bad("Project still has sub-projects. Delete or move them first.");
         news.findAll().stream().filter(n -> n.getProject() != null && n.getProject().getId().equals(id)).forEach(news::delete);
         savedFilters.deleteByProjectId(id);
         members.deleteByProjectId(id);
@@ -98,6 +101,29 @@ public class ProjectController {
         versions.deleteByProjectId(id);
         categories.deleteByProjectId(id);
         projects.delete(p);
+    }
+
+    /** Changing the project tree is an administrator task. Unchanged values are accepted from managers (the UI sends the whole form). */
+    private void applyHierarchy(User me, Project p, ProjectForm f) {
+        if (f.parentId() != null) {
+            Long want = f.parentId() <= 0 ? null : f.parentId();
+            Long cur = p.getParent() == null ? null : p.getParent().getId();
+            if (!java.util.Objects.equals(cur, want)) {
+                access.requireAdmin(me);
+                if (want == null) {
+                    p.setParent(null);
+                } else {
+                    Project parent = access.projectOrThrow(want);
+                    if (p.getId() != null && access.subtreeIds(p.getId()).contains(parent.getId()))
+                        throw bad("A project cannot be placed below itself or one of its sub-projects");
+                    p.setParent(parent);
+                }
+            }
+        }
+        if (f.inheritParent() != null && f.inheritParent() != p.isInheritParent()) {
+            access.requireAdmin(me);
+            p.setInheritParent(f.inheritParent());
+        }
     }
 
     private void apply(Project p, ProjectForm f) {
@@ -118,7 +144,11 @@ public class ProjectController {
     public List<CategoryView> categories(@PathVariable Long id) {
         Project p = access.projectOrThrow(id);
         access.require(current.get(), p, Lookups.VIEWER);
-        return categories.findByProjectIdOrderByName(id).stream().map(this::categoryView).toList();
+        List<CategoryView> out = new java.util.ArrayList<>();
+        categories.findByProjectIdOrderByName(id).forEach(c -> out.add(categoryView(c, id)));
+        for (Project a : access.inheritedAncestors(p))
+            categories.findByProjectIdOrderByName(a.getId()).forEach(c -> out.add(categoryView(c, id)));
+        return out;
     }
 
     @PostMapping("/{id}/categories")
@@ -131,7 +161,7 @@ public class ProjectController {
         c.setProject(p);
         c.setName(f.name().trim());
         c.setDefaultHandler(handler(p, f.defaultHandlerId()));
-        return categoryView(categories.save(c));
+        return categoryView(categories.save(c), id);
     }
 
     @PutMapping("/categories/{cid}")
@@ -140,7 +170,7 @@ public class ProjectController {
         access.require(current.get(), c.getProject(), Lookups.MANAGER);
         c.setName(f.name().trim());
         c.setDefaultHandler(handler(c.getProject(), f.defaultHandlerId()));
-        return categoryView(c);
+        return categoryView(c, c.getProject().getId());
     }
 
     @DeleteMapping("/categories/{cid}")
@@ -158,9 +188,10 @@ public class ProjectController {
         return u;
     }
 
-    private CategoryView categoryView(Category c) {
+    private CategoryView categoryView(Category c, Long forProjectId) {
         User h = c.getDefaultHandler();
-        return new CategoryView(c.getId(), c.getName(), h == null ? null : h.getId(), h == null ? null : h.getUsername());
+        return new CategoryView(c.getId(), c.getName(), h == null ? null : h.getId(), h == null ? null : h.getUsername(),
+                !c.getProject().getId().equals(forProjectId));
     }
 
     // ------------------------------------------------------------ versions
@@ -168,7 +199,11 @@ public class ProjectController {
     public List<VersionView> versions(@PathVariable Long id) {
         Project p = access.projectOrThrow(id);
         access.require(current.get(), p, Lookups.VIEWER);
-        return versions.findByProjectIdOrderByDateOrderDesc(id).stream().map(this::versionView).toList();
+        List<VersionView> out = new java.util.ArrayList<>();
+        versions.findByProjectIdOrderByDateOrderDesc(id).forEach(v -> out.add(versionView(v, id)));
+        for (Project a : access.inheritedAncestors(p))
+            versions.findByProjectIdOrderByDateOrderDesc(a.getId()).forEach(v -> out.add(versionView(v, id)));
+        return out;
     }
 
     @PostMapping("/{id}/versions")
@@ -178,7 +213,7 @@ public class ProjectController {
         ProjectVersion v = new ProjectVersion();
         v.setProject(p);
         applyVersion(v, f);
-        return versionView(versions.save(v));
+        return versionView(versions.save(v), id);
     }
 
     @PutMapping("/versions/{vid}")
@@ -186,7 +221,7 @@ public class ProjectController {
         ProjectVersion v = versions.findById(vid).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Version not found"));
         access.require(current.get(), v.getProject(), Lookups.MANAGER);
         applyVersion(v, f);
-        return versionView(v);
+        return versionView(v, v.getProject().getId());
     }
 
     @DeleteMapping("/versions/{vid}")
@@ -204,8 +239,9 @@ public class ProjectController {
         if (v.getDateOrder() == null) v.setDateOrder(Instant.now());
     }
 
-    private VersionView versionView(ProjectVersion v) {
-        return new VersionView(v.getId(), v.getVersion(), v.getDescription(), v.isReleased(), v.isObsolete(), v.getDateOrder());
+    private VersionView versionView(ProjectVersion v, Long forProjectId) {
+        return new VersionView(v.getId(), v.getVersion(), v.getDescription(), v.isReleased(), v.isObsolete(), v.getDateOrder(),
+                !v.getProject().getId().equals(forProjectId));
     }
 
     // ------------------------------------------------------------ members (per-project access levels)
