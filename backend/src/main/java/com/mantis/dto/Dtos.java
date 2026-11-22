@@ -142,4 +142,9 @@ public final class Dtos {
                                   UserRef user, boolean isPublic, FilterCriteria criteria) {}
     public record SavedFilterForm(@NotBlank @Size(max = 64) String name, Long projectId,
                                   Boolean isPublic, FilterCriteria criteria) {}
+
+    // ---- API tokens (Mantis REST / SOAP clients)
+    public record ApiTokenView(Long id, String name, Instant dateCreated, Instant dateLastUsed, boolean enabled) {}
+    public record ApiTokenCreated(String token, ApiTokenView details) {}
+    public record ApiTokenForm(@Size(max = 100) String name) {}
 }

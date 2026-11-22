@@ -16,7 +16,7 @@ cd backend  && mvn spring-boot:run   # API on :8080, creates all tables on first
 cd frontend && npm install && npm start   # UI on http://localhost:4200 (proxies /api to :8080)
 ```
 Login: `administrator` / `root` (same default as MantisBT – change it!). A "Sample Project" is seeded.
-Config via env vars: `DB_URL DB_USER DB_PASSWORD JWT_SECRET CORS_ORIGINS`.
+Config via env vars: `DB_URL DB_USER DB_PASSWORD JWT_SECRET CORS_ORIGINS` (plus the `API_*` variables for the REST/SOAP layer).
 
 ## What was migrated (PHP → Java)
 
@@ -38,7 +38,7 @@ Config via env vars: `DB_URL DB_USER DB_PASSWORD JWT_SECRET CORS_ORIGINS`.
 Deliberate differences: `bug_table` + `bug_text_table` and `bugnote` + `bugnote_text` are merged into one entity each; "no handler" is `NULL` instead of `0`; real foreign keys are created.
 
 ## NOT migrated yet (phase 2)
-Saved filters, time tracking/billing, sponsorship, plugin system, LDAP, SOAP API & Mantis REST API compatibility, CSV/Excel export, RSS, wiki, localisation (40 languages), project hierarchy/inheritance, move/clone issue, bulk actions.
+Saved filters, time tracking/billing, sponsorship, plugin system, LDAP, CSV/Excel export, RSS, wiki, localisation (40 languages), project hierarchy/inheritance, move/clone issue, bulk actions.
 
 ## Phase 2 (done)
 
@@ -121,7 +121,27 @@ For projects with hundreds of forms / many team members. *Manage Projects → (s
 * Sample files: `docs/bulk-templates/`.
 
 ### Still open
-SOAP/REST compatibility, localisation.
+Localisation.
+
+## Phase 6: MantisBT REST & SOAP API compatibility
+
+External tools can use a Mantis-compatible API in addition to the existing web UI. The layer translates
+requests and reuses the normal services, so project permissions, private issues/notes, workflow, history and
+notifications are enforced exactly as in the UI.
+
+* **REST** under `/api/rest/**` (JSON, `snake_case` fields): users, projects/categories/versions, issue
+  search/CRUD, notes, attachments, relationships, tags and monitors.
+* **SOAP** (MantisConnect) at `/api/soap`, WSDL at `/api/soap/mantisconnect.wsdl`: `mc_version`, `mc_login`,
+  `mc_projects_get_user_accessible`, `mc_project_get_issues`, `mc_issue_get`, `mc_issue_add`, `mc_issue_update`,
+  `mc_issue_delete`, `mc_issue_notes_get`, `mc_issue_note_add`.
+* **API tokens** for long-lived integrations (`/api/tokens`); only SHA-256 hashes are stored, the raw token is
+  shown once. `Authorization: Bearer <jwt-or-token>`.
+* Config: `API_REST_ENABLED`, `API_SOAP_ENABLED`, `API_TOKEN_ENABLED`, `API_LOGGING_ENABLED`,
+  `API_RATE_LIMIT_ENABLED`, `API_RATE_LIMIT_RPM`, `API_ATTACHMENT_MAX_BYTES`.
+* Tests: `cd backend && mvn test` (27 integration tests, H2 in PostgreSQL mode).
+
+Full endpoint list, compatibility matrix, examples, Postman collection and limitations:
+[`docs/API_COMPATIBILITY.md`](docs/API_COMPATIBILITY.md).
 
 ## Important notes
 * Existing databases: new columns/tables are added by `ddl-auto=update`; new columns carry DDL defaults so existing rows stay valid.

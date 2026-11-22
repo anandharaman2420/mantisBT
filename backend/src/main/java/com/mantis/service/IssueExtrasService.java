@@ -1,5 +1,6 @@
 package com.mantis.service;
 
+import com.mantis.config.ApiProperties;
 import com.mantis.domain.*;
 import com.mantis.dto.Dtos.*;
 import com.mantis.repo.*;
@@ -16,8 +17,6 @@ import java.util.*;
 @Service
 @Transactional
 public class IssueExtrasService {
-    static final long MAX_FILE = 5L * 1024 * 1024;
-
     private final IssueService issueService;
     private final IssueRepository issues;
     private final NoteRepository notes;
@@ -32,16 +31,18 @@ public class IssueExtrasService {
     private final NotificationService notifier;
     private final ProjectRepository projects;
     private final boolean trackTime;
+    private final ApiProperties api;
 
     public IssueExtrasService(IssueService issueService, IssueRepository issues, NoteRepository notes,
                               AttachmentRepository attachments, HistoryRepository historyRepo, MonitorRepository monitors,
                               RelationshipRepository relationships, UserRepository users, CategoryRepository categories,
                               AccessService access, HistoryService history, NotificationService notifier,
-                              ProjectRepository projects,
+                              ProjectRepository projects, ApiProperties api,
                               @org.springframework.beans.factory.annotation.Value("${app.time-tracking.enabled}") boolean trackTime) {
         this.issueService = issueService; this.issues = issues; this.notes = notes; this.attachments = attachments;
         this.historyRepo = historyRepo; this.monitors = monitors; this.relationships = relationships;
         this.users = users; this.categories = categories; this.access = access; this.history = history; this.notifier = notifier; this.projects = projects; this.trackTime = trackTime;
+        this.api = api;
     }
 
     private ResponseStatusException denied() { return new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"); }
@@ -148,7 +149,8 @@ public class IssueExtrasService {
         if (i.getStatus() >= Lookups.RESOLVED && lvl < Lookups.MANAGER)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Issue is read-only (resolved/closed)");
         if (file.isEmpty()) throw bad("Empty file");
-        if (file.getSize() > MAX_FILE) throw bad("File exceeds the 5 MB limit");
+        if (file.getSize() > api.getAttachment().getMaxSizeBytes())
+            throw bad("File exceeds the configured attachment limit");
         String name = Optional.ofNullable(file.getOriginalFilename()).orElse("file")
                 .replaceAll("[\\\\/]", "_").replaceAll("[\\p{Cntrl}]", "");
         if (name.length() > 250) name = name.substring(name.length() - 250);

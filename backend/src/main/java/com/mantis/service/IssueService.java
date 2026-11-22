@@ -68,6 +68,18 @@ public class IssueService {
         return i;
     }
 
+    /** Visibility check + DTO mapping in one transaction (used by the REST/SOAP compatibility layer). */
+    @Transactional(readOnly = true)
+    public IssueView viewById(User me, Long id) {
+        return view(me, getVisible(me, id));
+    }
+
+    /** Search that maps to DTOs inside the transaction (used by the REST compatibility layer). */
+    @Transactional(readOnly = true)
+    public Page<IssueView> searchViews(User me, Filter f, Pageable pg) {
+        return search(me, f, pg).map(i -> view(me, i));
+    }
+
     // ------------------------------------------------------------------ search (view_all_bug_page / filter_api)
     public record Filter(Long projectId, List<Integer> status, Long handlerId, Long reporterId, Integer priority,
                          Integer severity, Long categoryId, String search, boolean hideClosed, String tag) {}

@@ -1,0 +1,243 @@
+{
+  "info": {
+    "name": "MantisBT REST & SOAP Compatibility",
+    "description": "Collection for the Phase 6 Mantis-compatible REST (/api/rest) and SOAP (/api/soap) layer. Run Auth -> Login first: it stores the JWT in {{token}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "username", "value": "administrator" },
+    { "key": "password", "value": "root" },
+    { "key": "token", "value": "" },
+    { "key": "apiToken", "value": "" },
+    { "key": "projectId", "value": "1" },
+    { "key": "categoryId", "value": "1" },
+    { "key": "issueId", "value": "1" },
+    { "key": "fileId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (JWT)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": [ "{{baseUrl}}" ], "path": [ "api", "auth", "login" ] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [ "pm.test('login ok', () => pm.response.to.have.status(200));", "pm.collectionVariables.set('token', pm.response.json().token);" ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create API token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"postman\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/tokens", "host": [ "{{baseUrl}}" ], "path": [ "api", "tokens" ] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [ "pm.test('created', () => pm.response.to.have.status(201));", "pm.collectionVariables.set('apiToken', pm.response.json().token);" ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current user (JWT)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/rest/users/me", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "users", "me" ] }
+          }
+        },
+        {
+          "name": "Current user (API token)",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{apiToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/rest/users/me", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "users", "me" ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "REST",
+      "item": [
+        {
+          "name": "List projects",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/rest/projects", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "projects" ] }
+          }
+        },
+        {
+          "name": "List issues",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rest/issues?page=1&page_size=20&sort=id&dir=asc",
+              "host": [ "{{baseUrl}}" ],
+              "path": [ "api", "rest", "issues" ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" },
+                { "key": "sort", "value": "id" },
+                { "key": "dir", "value": "asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create issue",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project\": { \"id\": {{projectId}} },\n  \"category\": { \"id\": {{categoryId}} },\n  \"summary\": \"Issue created from Postman\",\n  \"description\": \"Created by the compatibility collection\",\n  \"priority\": { \"id\": 30 },\n  \"severity\": { \"name\": \"minor\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/rest/issues", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "issues" ] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [ "pm.test('created', () => pm.response.to.have.status(201));", "pm.collectionVariables.set('issueId', pm.response.json().id);" ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get issue",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/rest/issues/{{issueId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "issues", "{{issueId}}" ] }
+          }
+        },
+        {
+          "name": "Add note",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"text\": \"A note from Postman\",\n  \"view_state\": { \"id\": 10 }\n}" },
+            "url": { "raw": "{{baseUrl}}/api/rest/issues/{{issueId}}/notes", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "issues", "{{issueId}}", "notes" ] }
+          }
+        },
+        {
+          "name": "Upload attachment",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [ { "key": "file", "type": "file", "src": [] } ]
+            },
+            "url": { "raw": "{{baseUrl}}/api/rest/issues/{{issueId}}/files", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "issues", "{{issueId}}", "files" ] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [ "pm.collectionVariables.set('fileId', pm.response.json().id);" ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download attachment",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/rest/issues/{{issueId}}/files/{{fileId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "issues", "{{issueId}}", "files", "{{fileId}}" ] }
+          }
+        },
+        {
+          "name": "Delete issue",
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/rest/issues/{{issueId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "rest", "issues", "{{issueId}}" ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SOAP",
+      "item": [
+        {
+          "name": "mc_version",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "text/xml" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ns=\"http://futureware.biz/mantisconnect\">\n  <soapenv:Body>\n    <ns:mc_version/>\n  </soapenv:Body>\n</soapenv:Envelope>"
+            },
+            "url": { "raw": "{{baseUrl}}/api/soap", "host": [ "{{baseUrl}}" ], "path": [ "api", "soap" ] }
+          }
+        },
+        {
+          "name": "mc_login",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "text/xml" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ns=\"http://futureware.biz/mantisconnect\">\n  <soapenv:Body>\n    <ns:mc_login>\n      <username>{{username}}</username>\n      <password>{{password}}</password>\n    </ns:mc_login>\n  </soapenv:Body>\n</soapenv:Envelope>"
+            },
+            "url": { "raw": "{{baseUrl}}/api/soap", "host": [ "{{baseUrl}}" ], "path": [ "api", "soap" ] }
+          }
+        },
+        {
+          "name": "mc_issue_get",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "text/xml" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ns=\"http://futureware.biz/mantisconnect\">\n  <soapenv:Body>\n    <ns:mc_issue_get>\n      <username>{{username}}</username>\n      <password>{{password}}</password>\n      <issue_id>{{issueId}}</issue_id>\n    </ns:mc_issue_get>\n  </soapenv:Body>\n</soapenv:Envelope>"
+            },
+            "url": { "raw": "{{baseUrl}}/api/soap", "host": [ "{{baseUrl}}" ], "path": [ "api", "soap" ] }
+          }
+        },
+        {
+          "name": "WSDL",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/soap/mantisconnect.wsdl", "host": [ "{{baseUrl}}" ], "path": [ "api", "soap", "mantisconnect.wsdl" ] }
+          }
+        }
+      ]
+    }
+  ]
+}

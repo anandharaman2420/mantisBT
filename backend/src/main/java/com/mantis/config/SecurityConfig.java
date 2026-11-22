@@ -3,6 +3,7 @@ package com.mantis.config;
 import com.mantis.repo.UserRepository;
 import com.mantis.security.JwtAuthFilter;
 import com.mantis.security.JwtService;
+import com.mantis.service.ApiTokenService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,8 +27,9 @@ import java.util.List;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain chain(HttpSecurity http, JwtService jwt, UserRepository users) throws Exception {
-        JwtAuthFilter jwtFilter = new JwtAuthFilter(jwt, users);
+    SecurityFilterChain chain(HttpSecurity http, JwtService jwt, UserRepository users,
+                              ApiTokenService apiTokens, ApiProperties api) throws Exception {
+        JwtAuthFilter jwtFilter = new JwtAuthFilter(jwt, users, api.getToken().isEnabled() ? apiTokens : null);
         http.csrf(AbstractHttpConfigurer::disable)
             .cors(c -> {})
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -35,6 +37,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/login", "/error").permitAll()
+                // MantisConnect authenticates with username/password in every SOAP request body.
+                .requestMatchers("/api/soap/**").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
@@ -47,9 +51,9 @@ public class SecurityConfig {
     CorsConfigurationSource corsSource(@Value("${app.cors-origins}") String origins) {
         CorsConfiguration c = new CorsConfiguration();
         c.setAllowedOrigins(Arrays.asList(origins.split(",")));
-        c.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"));
         c.setAllowedHeaders(List.of("*"));
-        c.setExposedHeaders(List.of("Content-Disposition"));
+        c.setExposedHeaders(List.of("Content-Disposition", "X-Total-Count"));
         UrlBasedCorsConfigurationSource s = new UrlBasedCorsConfigurationSource();
         s.registerCorsConfiguration("/**", c);
         return s;
