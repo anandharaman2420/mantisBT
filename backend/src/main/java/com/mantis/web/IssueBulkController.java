@@ -37,7 +37,7 @@ public class IssueBulkController {
 
     @PostMapping("/issues/{id}/copy")
     @Transactional
-    public IssueView copy(@PathVariable Long id, @RequestBody CopyForm f) {
+    public IssueView copy(@PathVariable Long id, @Valid @RequestBody CopyForm f) {
         User me = current.get();
         Issue n = issues.copy(me, id, f);
         return issues.view(me, n);
