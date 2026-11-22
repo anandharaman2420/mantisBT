@@ -62,6 +62,9 @@ export interface AppConfig { timeTracking: boolean; }
 export interface TimeEntry { issueId: number; summary: string; projectName: string; user: UserRef; date: string; minutes: number; note: string; }
 export interface TimeUserTotal { user: UserRef; minutes: number; }
 export interface TimeReport { entries: TimeEntry[]; byUser: TimeUserTotal[]; totalMinutes: number; }
+export interface RowMessage { row: number; value: string; message: string; }
+export interface ImportResult { created: number; updated: number; skipped: number; removed: number; problems: RowMessage[]; }
+export interface CopyResult { categories: number; versions: number; members: number; customFields: number; problems: RowMessage[]; }
 export type Meta = Record<string, Record<string, string>>;
 
 export interface IssueQuery {
