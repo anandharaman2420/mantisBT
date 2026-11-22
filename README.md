@@ -105,6 +105,21 @@ A project can have a parent (*Manage Projects → Details*, administrator). The 
 * One parent per project (Mantis allowed several; the importer keeps the first and reports the others).
 * `tools/import_mantis.py` reads `project_hierarchy` and sets parent + inherit flag.
 
+## Phase 5: bulk project setup
+
+For projects with hundreds of forms / many team members. *Manage Projects → (select project)*, manager role required.
+
+| Where | What |
+|---|---|
+| **Categories → Bulk add** | paste a column from Excel (or upload .csv/.tsv/.txt), one category per line, optional 2nd column = default assignee. Up to 5000 rows. Existing names are skipped (assignee updated if given), duplicates and names that exist in a parent project are reported. |
+| **Versions → Bulk add** | same, columns: version, description, released, obsolete |
+| **Members → Bulk onboard** | **paste/upload a list** (`username` or e-mail + role: viewer / reporter / updater / developer / manager, default role for lines without one), **pick users** from a list with a role, or manage **current members** (remove selected, change role of selected). Administrators can also **create users that do not exist yet** (needs e-mail; one initial password for the batch). Roles above your own cannot be granted. |
+| **Copy setup** | copy categories, versions, members & roles and custom fields from another project |
+
+* One request = one transaction; a row with a problem (unknown user, name too long ...) is skipped and listed with its row number, the rest is applied.
+* Column separator: *Auto* uses tabs when pasting from Excel and otherwise treats a whole line as one value, so names like `Form 12, Part B` stay intact. Quoted CSV is supported.
+* Sample files: `docs/bulk-templates/`.
+
 ### Still open
 SOAP/REST compatibility, localisation.
 

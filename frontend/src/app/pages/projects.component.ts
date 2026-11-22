@@ -4,10 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../core/auth.service';
 import { ApiService } from '../core/api.service';
 import { errMsg } from '../core/auth.interceptor';
+import { BulkCategoriesComponent } from '../shared/bulk-categories.component';
+import { BulkMembersComponent } from '../shared/bulk-members.component';
+import { BulkVersionsComponent } from '../shared/bulk-versions.component';
+import { CopySetupComponent } from '../shared/copy-setup.component';
 import { ACCESS, CategoryView, CustomFieldView, MemberView, NewsView, ProjectView, UserRef, VersionView } from '../core/models';
 
 @Component({
-  selector: 'app-projects', standalone: true, imports: [FormsModule, DatePipe],
+  selector: 'app-projects', standalone: true, imports: [FormsModule, DatePipe, BulkCategoriesComponent, BulkVersionsComponent, BulkMembersComponent, CopySetupComponent],
   template: `
   <h1>Manage Projects</h1>
   @if (error) { <div class="err">{{ error }}</div> }
@@ -57,6 +61,7 @@ import { ACCESS, CategoryView, CustomFieldView, MemberView, NewsView, ProjectVie
           <div class="row" style="margin-top:10px"><div class="grow"><label>New category</label><input [(ngModel)]="newCat"></div>
             <div><label>Default assignee</label><select [(ngModel)]="newCatHandler"><option [ngValue]="null">–</option>@for (u of devs; track u.id) { <option [ngValue]="u.id">{{ u.username }}</option> }</select></div>
             <div><label>&nbsp;</label><button class="primary" (click)="addCat()">Add</button></div></div>
+          <app-bulk-categories [projectId]="sel.id" (done)="setTab('Categories')" />
         }
 
         @if (tab === 'Versions') {
@@ -67,6 +72,7 @@ import { ACCESS, CategoryView, CustomFieldView, MemberView, NewsView, ProjectVie
           </tbody></table>
           <div class="row" style="margin-top:10px"><div class="grow"><label>New version</label><input [(ngModel)]="newVer"></div>
             <div><label>&nbsp;</label><button class="primary" (click)="addVer()">Add</button></div></div>
+          <app-bulk-versions [projectId]="sel.id" (done)="setTab('Versions')" />
         }
 
         @if (tab === 'Members') {
@@ -79,6 +85,7 @@ import { ACCESS, CategoryView, CustomFieldView, MemberView, NewsView, ProjectVie
             <div class="grow"><label>User</label><select [(ngModel)]="memUser"><option [ngValue]="null">– select –</option>@for (u of allUsers; track u.id) { <option [ngValue]="u.id">{{ u.username }}</option> }</select></div>
             <div><label>Level</label><select [(ngModel)]="memLevel">@for (o of levels(); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
             <div><label>&nbsp;</label><button class="primary" (click)="setMember()" [disabled]="!memUser">Set</button></div></div>
+          <app-bulk-members [projectId]="sel.id" [myAccess]="sel.myAccess" (done)="setTab('Members')" />
         }
 
         @if (tab === 'Custom fields') {
@@ -90,6 +97,10 @@ import { ACCESS, CategoryView, CustomFieldView, MemberView, NewsView, ProjectVie
             <select [(ngModel)]="linkId"><option [ngValue]="null">– select –</option>@for (f of available; track f.id) { <option [ngValue]="f.id">{{ f.name }}</option> }</select></div>
             <div><label>&nbsp;</label><button class="primary" (click)="link()" [disabled]="!linkId">Add</button></div></div>
           <p class="muted" style="margin-top:8px">Removing a field also deletes its values on this project's issues.</p>
+        }
+
+        @if (tab === 'Copy setup') {
+          <app-copy-setup [projectId]="sel.id" (done)="setTab('Copy setup')" />
         }
 
         @if (tab === 'News') {
@@ -112,7 +123,7 @@ export class ProjectsComponent {
   error = '';
   np: any = { name: '', status: 10, viewState: 10, parentId: null };
   sel: ProjectView | null = null; edit: any = {};
-  tabs = ['Details', 'Categories', 'Versions', 'Members', 'Custom fields', 'News']; tab = 'Details';
+  tabs = ['Details', 'Categories', 'Versions', 'Members', 'Custom fields', 'Copy setup', 'News']; tab = 'Details';
   cats: CategoryView[] = []; vers: VersionView[] = []; mems: MemberView[] = []; news: NewsView[] = [];
   newCat = ''; newCatHandler: number | null = null; newVer = '';
   devs: UserRef[] = []; allUsers: UserRef[] = []; memUser: number | null = null; memLevel = 25;

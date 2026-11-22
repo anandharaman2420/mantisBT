@@ -106,6 +106,23 @@ public final class Dtos {
     public record BulkRequest(@NotEmpty @Size(max = 200) List<Long> ids, @NotBlank String action, Integer intValue,
                               Long longValue, String text, Integer resolution) {}
     public record BulkFailure(Long issueId, String message) {}
+
+    // ---- bulk project setup (categories, versions, members, copy from another project)
+    public record RowMessage(int row, String value, String message) {}
+    /** created / updated / skipped / removed counters + the rows that had a problem (first 200) */
+    public record ImportResult(int created, int updated, int skipped, int removed, List<RowMessage> problems) {}
+    public record BulkCategoryRow(String name, String assignee) {}
+    public record BulkCategoryRequest(@NotEmpty @Size(max = 5000) List<BulkCategoryRow> rows) {}
+    public record BulkVersionRow(String version, String description, Boolean released, Boolean obsolete) {}
+    public record BulkVersionRequest(@NotEmpty @Size(max = 2000) List<BulkVersionRow> rows) {}
+    /** user = username or e-mail; accessLevel null -> defaultLevel; email/realname only used when creating new users */
+    public record BulkMemberRow(String user, Integer accessLevel, String email, String realname) {}
+    public record BulkMemberRequest(@NotEmpty @Size(max = 2000) List<BulkMemberRow> rows, Integer defaultLevel,
+                                    Boolean createMissing, String initialPassword) {}
+    public record RemoveMembersRequest(@NotEmpty @Size(max = 2000) List<Long> userIds) {}
+    public record CopyFromRequest(@NotNull Long sourceProjectId, Boolean categories, Boolean versions, Boolean members,
+                                  Boolean customFields) {}
+    public record CopyResult(int categories, int versions, int members, int customFields, List<RowMessage> problems) {}
     public record BulkResult(int succeeded, List<BulkFailure> failures) {}
 
     public record AppConfig(boolean timeTracking) {}

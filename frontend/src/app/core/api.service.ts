@@ -104,6 +104,13 @@ export class ApiService {
   addRelationship(id: number, type: number, otherIssueId: number) { return this.http.post<M.RelationshipView>(`${this.base}/issues/${id}/relationships`, { type, otherIssueId }); }
   deleteRelationship(relId: number) { return this.http.delete<void>(`${this.base}/relationships/${relId}`); }
 
+  // bulk project setup
+  bulkCategories(pid: number, rows: { name: string; assignee: string }[]) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/categories/bulk`, { rows }); }
+  bulkVersions(pid: number, rows: any[]) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/versions/bulk`, { rows }); }
+  bulkMembers(pid: number, body: any) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/members/bulk`, body); }
+  removeMembersBulk(pid: number, userIds: number[]) { return this.http.post<M.ImportResult>(`${this.base}/projects/${pid}/members/remove-bulk`, { userIds }); }
+  copyFrom(pid: number, body: any) { return this.http.post<M.CopyResult>(`${this.base}/projects/${pid}/copy-from`, body); }
+
   // config / time tracking
   config() { return this.http.get<M.AppConfig>(`${this.base}/config`); }
   timeReport(projectId: number | null, from: string, to: string) {
