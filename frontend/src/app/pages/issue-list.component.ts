@@ -46,12 +46,26 @@ import { CategoryView, FilterCriteria, IssueQuery, IssueSummary, SavedFilterView
 
     <div class="row">
       <div class="grow" style="min-width:220px"><label>Search (summary, description, id)</label><input [(ngModel)]="q" (keyup.enter)="reload()" placeholder="Search…"></div>
-      <div><label>Status</label><select [(ngModel)]="status"><option [ngValue]="null">any</option>
-        @for (o of auth.options('status'); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
+      <div class="msel"><label>Status</label>
+        <details #statusMenu><summary>{{ statusSummary() }}</summary>
+          <div class="menu">
+            @for (o of auth.options('status'); track o.value) {
+              <label class="opt"><input type="checkbox" [checked]="statuses.includes(o.value)" (change)="toggleStatus(o.value)"> <span class="chip s{{ o.value }}">{{ o.label }}</span></label>
+            }
+            <a href="#" (click)="statuses = []; $event.preventDefault()">clear (any status)</a>
+          </div>
+        </details></div>
       <div><label>Priority</label><select [(ngModel)]="priority"><option [ngValue]="null">any</option>
         @for (o of auth.options('priority'); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
       <div><label>Severity</label><select [(ngModel)]="severity"><option [ngValue]="null">any</option>
         @for (o of auth.options('severity'); track o.value) { <option [ngValue]="o.value">{{ o.label }}</option> }</select></div>
+      <div><label>Tag</label><input [(ngModel)]="tag" (keyup.enter)="reload()" style="width:120px" placeholder="any"></div>
+      @if (reporters.length) {
+        <div><label>Reporter</label><select [(ngModel)]="reporterId"><option [ngValue]="null">anyone</option>
+          @for (u of reporters; track u.id) { <option [ngValue]="u.id">{{ u.username }}</option> }</select></div>
+      } @else if (reporterId) {
+        <div><label>Reporter</label><span class="tag">#{{ reporterId }} <a href="#" (click)="reporterId = null; $event.preventDefault()">×</a></span></div>
+      }
       @if (auth.projectId()) {
         <div><label>Category</label><select [(ngModel)]="categoryId"><option [ngValue]="null">any</option>
           @for (c of categories; track c.id) { <option [ngValue]="c.id">{{ c.name }}</option> }</select></div>
@@ -111,7 +125,8 @@ export class IssueListComponent {
   private router = inject(Router);
 
   items: IssueSummary[] = []; total = 0; page = 0; size = 25; error = '';
-  q = ''; status: number | null = null; priority: number | null = null; severity: number | null = null;
+  q = ''; statuses: number[] = []; tag = ''; reporterId: number | null = null; reporters: UserRef[] = [];
+  priority: number | null = null; severity: number | null = null;
   categoryId: number | null = null; handlerId: number | null = null; hideClosed = true;
   sortBy = 'lastUpdated'; dir = 'desc';
   categories: CategoryView[] = []; handlers: UserRef[] = [];
@@ -143,7 +158,11 @@ export class IssueListComponent {
 
   constructor() {
     const qp = this.route.snapshot.queryParamMap;
-    if (qp.get('status')) { this.status = Number(qp.get('status')); this.hideClosed = false; }
+    const st = qp.getAll('status').map(Number).filter(n => !isNaN(n));
+    if (st.length) { this.statuses = st; this.hideClosed = false; }
+    if (qp.get('tag')) this.tag = qp.get('tag')!;                 // links from the issue page: /issues?tag=x
+    if (qp.get('reporterId')) this.reporterId = Number(qp.get('reporterId'));
+    this.api.userLookup().subscribe({ next: u => this.reporters = u, error: () => {} });   // developers only; others keep the id chip
     // reload whenever the project selector changes
     effect(() => {
       const pid = this.auth.projectId();
@@ -173,7 +192,9 @@ export class IssueListComponent {
     if (!f || !f.criteria) return;
     const c = f.criteria;
     this.q = c.q ?? '';
-    this.status = (c.status && c.status.length) ? c.status[0] : null;
+    this.statuses = c.status ? [...c.status] : [];
+    this.reporterId = c.reporterId ?? null;
+    this.tag = c.tag ?? '';
     this.priority = c.priority ?? null;
     this.severity = c.severity ?? null;
     this.categoryId = c.categoryId ?? null;
@@ -194,18 +215,7 @@ export class IssueListComponent {
 
   saveFilter() {
     if (!this.newFilterName.trim()) return;
-    const criteria: FilterCriteria = {
-      projectId: this.auth.projectId(),
-      status: this.status !== null ? [this.status] : [],
-      handlerId: this.handlerId,
-      priority: this.priority,
-      severity: this.severity,
-      categoryId: this.categoryId,
-      q: this.q,
-      hideClosed: this.hideClosed,
-      sortBy: this.sortBy,
-      dir: this.dir
-    };
+    const criteria: FilterCriteria = this.criteria();
     this.api.createFilter({
       name: this.newFilterName.trim(),
       projectId: this.auth.projectId(),
@@ -237,18 +247,7 @@ export class IssueListComponent {
 
   export(type: 'csv' | 'excel') {
     this.exporting = true;
-    const q: IssueQuery = {
-      projectId: this.auth.projectId(),
-      status: this.status !== null ? [this.status] : [],
-      handlerId: this.handlerId,
-      priority: this.priority,
-      severity: this.severity,
-      categoryId: this.categoryId,
-      q: this.q,
-      hideClosed: this.hideClosed,
-      sortBy: this.sortBy,
-      dir: this.dir
-    };
+    const q: IssueQuery = this.criteria();
     const call = type === 'csv' ? this.api.exportCsv(q) : this.api.exportExcel(q);
     call.subscribe({
       next: blob => {
@@ -270,18 +269,27 @@ export class IssueListComponent {
   }
 
   load() {
-    this.api.issues({
-      projectId: this.auth.projectId(), status: this.status !== null ? [this.status] : [], handlerId: this.handlerId,
-      priority: this.priority, severity: this.severity, categoryId: this.categoryId, q: this.q,
-      hideClosed: this.hideClosed, sortBy: this.sortBy, dir: this.dir, page: this.page, size: this.size
-    }).subscribe({
+    this.api.issues({ ...this.criteria(), page: this.page, size: this.size }).subscribe({
       next: r => { this.items = r.items; this.total = r.total; this.error = ''; this.selectedIds = []; }, error: e => this.error = errMsg(e)
     });
+  }
+  /** the single source for list, export and saved filters (all criteria, incl. several statuses, tag, reporter) */
+  private criteria(): FilterCriteria {
+    return {
+      projectId: this.auth.projectId(), status: [...this.statuses], handlerId: this.handlerId, reporterId: this.reporterId,
+      priority: this.priority, severity: this.severity, categoryId: this.categoryId, q: this.q,
+      tag: this.tag.trim() || undefined, hideClosed: this.hideClosed, sortBy: this.sortBy, dir: this.dir
+    };
+  }
+  toggleStatus(v: number) { this.statuses = this.statuses.includes(v) ? this.statuses.filter(x => x !== v) : [...this.statuses, v]; }
+  statusSummary() {
+    if (!this.statuses.length) return 'any';
+    return this.statuses.length <= 2 ? this.statuses.map(s => this.auth.label('status', s)).join(', ') : `${this.statuses.length} selected`;
   }
   reload() { this.page = 0; this.load(); }
   reset() {
     this.selectedFilterId = null;
-    this.q = ''; this.status = this.priority = this.severity = this.categoryId = this.handlerId = null;
+    this.q = ''; this.statuses = []; this.tag = ''; this.priority = this.severity = this.categoryId = this.handlerId = this.reporterId = null;
     this.hideClosed = true;
     this.reload();
   }

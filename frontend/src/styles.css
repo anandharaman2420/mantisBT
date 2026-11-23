@@ -42,3 +42,11 @@ tr.clickable { cursor: pointer; } tr.clickable:hover td { background: #f3f8fe; }
 .note.private { border-color: #dd6b20; background: #fffaf0; }
 .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
 .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; } .tabs button.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+/* multi-select status dropdown on the issue list */
+.msel { position: relative; }
+.msel summary { list-style: none; cursor: pointer; padding: 7px 9px; border: 1px solid var(--border); border-radius: 4px; background: #fff; min-width: 110px; }
+.msel summary::-webkit-details-marker { display: none; }
+.msel summary::after { content: " ▾"; color: var(--muted); }
+.msel .menu { position: absolute; z-index: 20; top: 100%; left: 0; background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; min-width: 190px; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.msel .menu .opt { display: flex; gap: 6px; align-items: center; font-weight: 400; font-size: 14px; color: inherit; margin: 3px 0; }

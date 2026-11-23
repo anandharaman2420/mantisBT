@@ -259,10 +259,10 @@ public class IssueService {
         upd(me, i, "build", i.getBuild(), f.build(), i::setBuild);
         upd(me, i, "view_state", i.getViewState(), f.viewState() == null ? null : valid(Lookups.VIEW_STATE, f.viewState(), "viewState"), i::setViewState);
 
-        // Empty version values mean "clear" in bulk and move/copy-style update forms.
-        // Null means unchanged, so normalize only non-null values after the DTO is mapped.
-        String fixedInVersion = f.fixedInVersion() == null ? null : (f.fixedInVersion().trim().isEmpty() ? null : f.fixedInVersion().trim());
-        String targetVersion = f.targetVersion() == null ? null : (f.targetVersion().trim().isEmpty() ? null : f.targetVersion().trim());
+        // Version fields: null = unchanged, "" = clear (the column stores "" for "no version").
+        // NOTE: upd() ignores null, so a cleared value must stay "" and must not be mapped to null.
+        String fixedInVersion = f.fixedInVersion() == null ? null : f.fixedInVersion().trim();
+        String targetVersion = f.targetVersion() == null ? null : f.targetVersion().trim();
 
         if (f.categoryId() != null) {
             Long old = i.getCategory() == null ? null : i.getCategory().getId();
@@ -274,10 +274,8 @@ public class IssueService {
         }
         // developer-only fields
         boolean devFieldTouched =
-                (fixedInVersion != null && !fixedInVersion.equals(i.getFixedInVersion()))
-                || (f.fixedInVersion() != null && fixedInVersion == null && i.getFixedInVersion() != null)
-                || (targetVersion != null && !targetVersion.equals(i.getTargetVersion()))
-                || (f.targetVersion() != null && targetVersion == null && i.getTargetVersion() != null)
+                (fixedInVersion != null && !fixedInVersion.equals(blankIfNull(i.getFixedInVersion())))
+                || (targetVersion != null && !targetVersion.equals(blankIfNull(i.getTargetVersion())))
                 || (f.sticky() != null && f.sticky() != i.isSticky())
                 || (f.status() != null && f.status() != i.getStatus())
                 || (f.resolution() != null && f.resolution() != i.getResolution())
@@ -590,6 +588,8 @@ public class IssueService {
         if (!allowed.containsKey(v)) throw bad("Invalid value for " + field + ": " + v);
         return v;
     }
+
+    private static String blankIfNull(String s) { return s == null ? "" : s; }
 
     static boolean blank(String s) { return s == null || s.isBlank(); }
 }
