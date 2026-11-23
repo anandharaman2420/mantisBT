@@ -1,0 +1,59 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/mantis}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:root}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update          # tables are created / altered automatically at startup
+    properties:
+      hibernate:
+        format_sql: false
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:25}
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_STARTTLS:false}
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-secret-change-this-secret-change-this-123456}
+    expiry-minutes: 480
+  base-url: ${APP_BASE_URL:http://localhost:4200}     # used for the links inside e-mails
+  mail:
+    enabled: ${MAIL_ENABLED:false}                    # set MAIL_ENABLED=true once SMTP is configured
+    from: ${MAIL_FROM:mantis@localhost}
+  time-tracking:
+    enabled: ${TIME_TRACKING_ENABLED:true}            # developers can log time on notes, managers get the time report
+  cors-origins: ${CORS_ORIGINS:http://localhost:4200}
+  # MantisBT REST / SOAP compatibility layer (see docs/API_COMPATIBILITY.md)
+  api:
+    rest:
+      enabled: ${API_REST_ENABLED:true}               # expose the Mantis-compatible REST API under /api/rest
+    soap:
+      enabled: ${API_SOAP_ENABLED:true}               # expose the MantisConnect SOAP endpoint under /api/soap
+    token:
+      enabled: ${API_TOKEN_ENABLED:true}              # accept long-lived API tokens in the Authorization header
+    logging:
+      enabled: ${API_LOGGING_ENABLED:false}           # log method/path/status/duration for /api/rest and /api/soap
+    rate-limit:
+      enabled: ${API_RATE_LIMIT_ENABLED:true}         # simple per-instance sliding-window limiter
+      requests-per-minute: ${API_RATE_LIMIT_RPM:120}
+    attachment:
+      max-size-bytes: ${API_ATTACHMENT_MAX_BYTES:5242880}  # hard upload limit for web UI + REST (5 MB default)
+  # default admin created on first start (same defaults as MantisBT: administrator / root)
+  seed:
+    admin-username: administrator
+    admin-password: root
+    admin-email: root@localhost
