@@ -3,7 +3,9 @@ package com.mantis.web;
 import com.mantis.domain.User;
 import com.mantis.dto.Dtos.*;
 import com.mantis.repo.UserRepository;
+import com.mantis.security.ClientIp;
 import com.mantis.security.CurrentUser;
+import com.mantis.security.LoginAttemptService;
 import com.mantis.security.JwtService;
 import com.mantis.service.Mapper;
 import com.mantis.service.PasswordService;
@@ -24,17 +26,26 @@ public class AuthController {
     private final PasswordService passwords;
     private final JwtService jwt;
     private final CurrentUser current;
+    private final LoginAttemptService attempts;
 
-    public AuthController(UserRepository users, PasswordService passwords, JwtService jwt, CurrentUser current) {
-        this.users = users; this.passwords = passwords; this.jwt = jwt; this.current = current;
+    public AuthController(UserRepository users, PasswordService passwords, JwtService jwt, CurrentUser current,
+                          LoginAttemptService attempts) {
+        this.users = users; this.passwords = passwords; this.jwt = jwt; this.current = current; this.attempts = attempts;
     }
 
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest r) {
-        User u = users.findByUsername(r.username().trim())
-                .filter(User::isEnabled)
-                .filter(x -> passwords.verify(x, r.password()))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
+        String username = r.username().trim();
+        String ip = ClientIp.current();
+        attempts.check(username, ip);                                   // 429 while locked
+        User candidate = users.findByUsername(username).filter(User::isEnabled).orElse(null);
+        boolean ok = candidate != null ? passwords.verify(candidate, r.password()) : passwords.burn(r.password());
+        if (!ok) {
+            attempts.failure(username, ip);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
+        }
+        attempts.success(username, ip);
+        User u = candidate;
         u.setLastVisit(Instant.now());
         u.setLoginCount(u.getLoginCount() + 1);
         return new LoginResponse(jwt.generate(u.getUsername()), Mapper.user(u));
@@ -53,8 +64,13 @@ public class AuthController {
     @PostMapping("/change-password")
     public Map<String, String> changePassword(@Valid @RequestBody ChangePassword r) {
         User u = current.get();
-        if (!passwords.verify(u, r.currentPassword()))
+        String ip = ClientIp.current();
+        attempts.check(u.getUsername(), ip);
+        if (!passwords.verify(u, r.currentPassword())) {
+            attempts.failure(u.getUsername(), ip);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is wrong");
+        }
+        attempts.success(u.getUsername(), ip);
         u.setPassword(passwords.encode(r.newPassword()));
         return Map.of("message", "Password changed");
     }

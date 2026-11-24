@@ -16,7 +16,8 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<Map<String, String>> status(ResponseStatusException e) {
-        return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", String.valueOf(e.getReason())));
+        return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders())
+                .body(Map.of("message", String.valueOf(e.getReason())));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

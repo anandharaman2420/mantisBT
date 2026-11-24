@@ -1,5 +1,9 @@
 server:
   port: 8080
+  # Real client address behind nginx / a load balancer (needed by the login throttle and the API rate limit).
+  # "native" only trusts X-Forwarded-For from private-range proxies (10/8, 172.16/12, 192.168/16, 127/8); a request
+  # that comes straight from a public address cannot spoof it. Use "none" if the app is never behind a proxy.
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:native}
 
 spring:
   datasource:
@@ -30,6 +34,13 @@ app:
   jwt:
     secret: ${JWT_SECRET:change-this-secret-change-this-secret-change-this-123456}
     expiry-minutes: 480
+  security:
+    # brute-force protection of every password check (web login, change password, SOAP login) - see LoginAttemptService
+    login-throttle:
+      enabled: ${LOGIN_THROTTLE_ENABLED:true}
+      max-failures: ${LOGIN_MAX_FAILURES:5}      # wrong passwords per user+address within the window before a lock
+      window-minutes: 15
+      lock-minutes: 15                           # first lock; every further lock doubles (max 24 h)
   base-url: ${APP_BASE_URL:http://localhost:4200}     # used for the links inside e-mails
   mail:
     enabled: ${MAIL_ENABLED:false}                    # set MAIL_ENABLED=true once SMTP is configured

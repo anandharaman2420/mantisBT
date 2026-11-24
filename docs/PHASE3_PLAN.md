@@ -53,6 +53,24 @@ customer contract requires them now.
 **Next:** integration tests with Testcontainers, audit-safe issue deletion, refresh tokens/login
 throttling, then bulk actions and move/clone.
 
+**2026-11-22 — Security slice (Sprint 1, item 4 partly) and review fixes**
+
+- [x] Login throttling / lockout for web login, change-password **and SOAP login** (`LoginAttemptService`):
+      per user+address (5 failures / 15 min, lock doubles up to 24 h), per address (6x), per user from
+      anywhere (6x, short non-escalating lock so nobody can be locked out for long). HTTP 429 + `Retry-After`.
+      In-memory (per instance). 16 unit tests (`LoginThrottleTest`, fake clock, no Spring).
+- [x] Unknown-user logins now spend the same BCrypt time as wrong passwords (no user enumeration by timing).
+- [x] `server.forward-headers-strategy=native` default so the real client address is used behind nginx
+      (without it all users share one address and 30 bad logins would lock everybody out).
+- [x] API security headers (CSP `default-src 'none'`, frame-ancestors none, referrer policy, permissions policy, HSTS);
+      nginx adds a strict SPA CSP. Angular production build no longer inlines critical CSS (`inlineCritical: false`)
+      because its `onload` trick is an inline script that a strict CSP blocks.
+- [x] Defect 6 (review): saved filters keep all selected statuses; reporter and tag are filter fields too;
+      `/issues?tag=x` links work.
+- [x] Fixed: clearing "fixed in" / "target" version did nothing (null meant "unchanged").
+- [ ] Still open: refresh-token rotation and logout revocation (needs token storage or a per-user token version
+      -> schema change, wait for the Flyway V2 migration), cluster-wide throttling (needs shared store).
+
 ---
 
 ## 2. Current state

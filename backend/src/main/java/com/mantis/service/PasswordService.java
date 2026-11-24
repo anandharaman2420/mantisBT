@@ -15,8 +15,23 @@ import java.util.HexFormat;
 @Service
 public class PasswordService {
     private final PasswordEncoder encoder;
+    /** hash of a random value, only used by burn() */
+    private final String dummyHash;
 
-    public PasswordService(PasswordEncoder encoder) { this.encoder = encoder; }
+    public PasswordService(PasswordEncoder encoder) {
+        this.encoder = encoder;
+        this.dummyHash = encoder.encode(java.util.UUID.randomUUID().toString());
+    }
+
+    /**
+     * Spends the same time as a real password check. Called when the user name does not exist (or is disabled), so that
+     * "unknown user" does not answer measurably faster than "wrong password" (user enumeration by timing).
+     * @return always false
+     */
+    public boolean burn(String raw) {
+        encoder.matches(raw == null ? "" : raw, dummyHash);
+        return false;
+    }
 
     public String encode(String raw) { return encoder.encode(raw); }
 

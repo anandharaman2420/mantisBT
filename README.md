@@ -148,3 +148,16 @@ Full endpoint list, compatibility matrix, examples, Postman collection and limit
 * The **frontend was built successfully** (`ng build`). The **backend could not be compiled in the sandbox** (no access to Maven Central); I checked the Java syntax of all files, but expect to fix a few small compile/runtime issues on your first `mvn spring-boot:run`.
 * `ddl-auto=update` is convenient for development; for production switch to Flyway/Liquibase.
 * To import existing MantisBT data, write an SQL script mapping `handler_id = 0 → NULL` and joining `bug_text`/`bugnote_text` into the merged tables.
+
+
+## Login protection and security headers
+
+* **Login throttling** (`LoginAttemptService`) protects every place a password is checked: web login, change password and
+  SOAP login. Per user + address 5 wrong passwords in 15 minutes lock that combination for 15 min, then 30, 60 ... up to
+  24 h; one address trying many users and distributed guessing against one user are limited as well. The answer is
+  HTTP 429 with `Retry-After`. Settings: `LOGIN_THROTTLE_ENABLED`, `LOGIN_MAX_FAILURES`, `app.security.login-throttle.*`.
+  State is in memory: it resets on restart and is per instance.
+* Behind nginx / a load balancer keep `FORWARD_HEADERS_STRATEGY=native` (default) so the real client address is used.
+  Only private-range proxies are trusted, a client cannot spoof `X-Forwarded-For` when it connects directly.
+* The API sends `Content-Security-Policy: default-src 'none'`, `X-Frame-Options: DENY`, a referrer and permissions policy
+  and HSTS (HTTPS only); `frontend/nginx.conf` adds a strict CSP for the Angular app.
