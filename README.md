@@ -161,3 +161,11 @@ Full endpoint list, compatibility matrix, examples, Postman collection and limit
   Only private-range proxies are trusted, a client cannot spoof `X-Forwarded-For` when it connects directly.
 * The API sends `Content-Security-Policy: default-src 'none'`, `X-Frame-Options: DENY`, a referrer and permissions policy
   and HSTS (HTTPS only); `frontend/nginx.conf` adds a strict CSP for the Angular app.
+
+
+## Data migration from a live MantisBT
+
+`tools/import_mantis.py` copies a live MantisBT 2.x database (MySQL / MariaDB / PostgreSQL) into this application and then
+reconciles source and target (counts, per-project / per-status figures and a content digest of every issue and note).
+It is covered by end-to-end tests against real PostgreSQL and MySQL servers and was run against 50 000 issues / 300 000 notes /
+500 000 history rows. See `tools/IMPORT.md`.

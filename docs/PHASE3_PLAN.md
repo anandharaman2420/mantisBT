@@ -68,6 +68,10 @@ throttling, then bulk actions and move/clone.
 - [x] Defect 6 (review): saved filters keep all selected statuses; reporter and tag are filter fields too;
       `/issues?tag=x` links work.
 - [x] Fixed: clearing "fixed in" / "target" version did nothing (null meant "unchanged").
+- [x] Backlog #25 (importer hardening + reconciliation): `tools/import_mantis.py` now streams issues/notes/history
+      (1.1 GB -> 47 MB peak on 850k rows), reconciles source vs target (`--verify-only`, content digests, exit code 2),
+      supports `--src-charset`, fixes the id sequence of tables that are empty in the source. 43 end-to-end tests
+      (`tools/tests`, embedded PostgreSQL + real MySQL, schema generated from the JPA entities); CI job `importer`.
 - [ ] Still open: refresh-token rotation and logout revocation (needs token storage or a per-user token version
       -> schema change, wait for the Flyway V2 migration), cluster-wide throttling (needs shared store).
 

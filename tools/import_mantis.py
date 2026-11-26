@@ -53,19 +53,161 @@ def parse():
     p.add_argument('--files-dir', help='folder with attachments if Mantis stored them on disk (upload method DISK)')
     p.add_argument('--wipe', action='store_true', help='empty the target tables first (needed: the backend seeds an admin + sample project)')
     p.add_argument('--dry-run', action='store_true', help='read and validate only, write nothing')
+    p.add_argument('--src-charset', default='utf8mb4', help='MySQL connection charset (use latin1 if umlauts come out garbled)')
+    p.add_argument('--no-verify', action='store_true', help='skip the reconciliation after the import')
+    p.add_argument('--verify-only', action='store_true', help='do not import, only compare source and target (reconciliation)')
     return p.parse_args()
 
 # ---------------------------------------------------------------- main
+def connect_source(a):
+    """connection to the live MantisBT database (read only use)"""
+    if a.src_type == 'mysql':
+        import pymysql, pymysql.cursors
+        return pymysql.connect(host=a.src_host, port=a.src_port or 3306, user=a.src_user, password=a.src_password,
+                               database=a.src_db, charset=a.src_charset, cursorclass=pymysql.cursors.DictCursor)
+    import psycopg2, psycopg2.extras
+    return psycopg2.connect(host=a.src_host, port=a.src_port or 5432, user=a.src_user, password=a.src_password,
+                            dbname=a.src_db, cursor_factory=psycopg2.extras.RealDictCursor)
+
+
+def stream(conn, sql, kind, name):
+    """yields rows one by one WITHOUT loading the whole result set into memory (server side cursor)"""
+    if kind == 'mysql':
+        import pymysql.cursors
+        cur = conn.cursor(pymysql.cursors.SSDictCursor)
+    else:
+        import psycopg2.extras
+        cur = conn.cursor(name=name, cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.itersize = 2000
+    cur.execute(sql)
+    for row in cur:
+        yield row
+    cur.close()
+
+
+def scalar_count(cur, sql):
+    cur.execute(sql); r = cur.fetchone()
+    return int((list(r.values())[0] if isinstance(r, dict) else r[0]) or 0)
+
+
+def reconcile(a, written=None, attachments_missing=0):
+    """
+    Compares the target with the live source - independently of the transformation code, with SQL on both sides:
+    row counts, issues per project / status, notes, time tracking, history, and a SHA-256 digest over every issue
+    (ids, classification, dates, texts) and every note. Returns the number of failed checks.
+    """
+    import hashlib, psycopg2
+    src = connect_source(a)
+    sc = src.cursor()
+    dst = psycopg2.connect(host=a.dst_host, port=a.dst_port, dbname=a.dst_db, user=a.dst_user, password=a.dst_password)
+    dc = dst.cursor()
+    T = lambda n: f'{a.src_prefix}_{n}_table'
+    D = lambda n: f'mantis_{n}_table'
+    known = f"{T('bug')} b JOIN {T('project')} p ON p.id = b.project_id"      # issues of projects that exist
+    fails = 0
+
+    def one(cur, sql):
+        cur.execute(sql); r = cur.fetchone()
+        return int((list(r.values())[0] if isinstance(r, dict) else r[0]) or 0)
+
+    def pairs(cur, sql):
+        cur.execute(sql)
+        return {(r['k'] if isinstance(r, dict) else r[0]): int(r['n'] if isinstance(r, dict) else r[1]) for r in cur.fetchall()}
+
+    def check(name, s_val, t_val, strict=True):
+        nonlocal fails
+        ok = s_val == t_val
+        if not ok and strict: fails += 1
+        tag = 'PASS' if ok else ('FAIL' if strict else 'INFO')
+        shown = f'{s_val} / {t_val}' if not isinstance(s_val, dict) else f'{len(s_val)} groups'
+        print(f'  [{tag}] {name:48s} source / target: {shown}')
+        if not ok and isinstance(s_val, dict):
+            diff = {k: (s_val.get(k), t_val.get(k)) for k in set(s_val) | set(t_val) if s_val.get(k) != t_val.get(k)}
+            print(f'         differences (key: source, target): {dict(list(diff.items())[:10])}')
+
+    print('\n=== RECONCILIATION (source vs target) ===')
+    check('users', one(sc, f"SELECT COUNT(*) AS n FROM {T('user')}"), one(dc, f"SELECT COUNT(*) FROM {D('user')}"))
+    check('projects', one(sc, f"SELECT COUNT(*) AS n FROM {T('project')}"), one(dc, f"SELECT COUNT(*) FROM {D('project')}"))
+    check('issues', one(sc, f"SELECT COUNT(*) AS n FROM {known}"), one(dc, f"SELECT COUNT(*) FROM {D('bug')}"))
+    check('issues per project', pairs(sc, f"SELECT b.project_id AS k, COUNT(*) AS n FROM {known} GROUP BY b.project_id"),
+          pairs(dc, f"SELECT project_id, COUNT(*) FROM {D('bug')} GROUP BY project_id"))
+    check('issues per status', pairs(sc, f"SELECT b.status AS k, COUNT(*) AS n FROM {known} GROUP BY b.status"),
+          pairs(dc, f"SELECT status, COUNT(*) FROM {D('bug')} GROUP BY status"))
+    check('issues per priority', pairs(sc, f"SELECT b.priority AS k, COUNT(*) AS n FROM {known} GROUP BY b.priority"),
+          pairs(dc, f"SELECT priority, COUNT(*) FROM {D('bug')} GROUP BY priority"))
+    notes_src = f"{T('bugnote')} n JOIN {known.replace(' b JOIN', ' b JOIN', 1)} ON b.id = n.bug_id"
+    check('notes', one(sc, f"SELECT COUNT(*) AS n FROM {notes_src}"), one(dc, f"SELECT COUNT(*) FROM {D('bugnote')}"))
+    check('private notes', one(sc, f"SELECT COUNT(*) AS n FROM {notes_src} WHERE n.view_state = 50"),
+          one(dc, f"SELECT COUNT(*) FROM {D('bugnote')} WHERE view_state = 50"))
+    check('time tracking (minutes)', one(sc, f"SELECT COALESCE(SUM(n.time_tracking),0) AS n FROM {notes_src}"),
+          one(dc, f"SELECT COALESCE(SUM(time_tracking),0) FROM {D('bugnote')}"))
+    check('history rows', one(sc, f"SELECT COUNT(*) AS n FROM {T('bug_history')} h JOIN {known} ON b.id = h.bug_id"),
+          one(dc, f"SELECT COUNT(*) FROM {D('bug_history')}"))
+    check('news', one(sc, f"SELECT COUNT(*) AS n FROM {T('news')}"), one(dc, f"SELECT COUNT(*) FROM {D('news')}"))
+    # legitimate differences are possible below (duplicates / orphans are dropped on purpose): informational only
+    check('tags (distinct names)', one(sc, f"SELECT COUNT(DISTINCT LOWER(name)) AS n FROM {T('tag')}"), one(dc, f"SELECT COUNT(*) FROM {D('tag')}"), False)
+    check('custom fields (distinct names)', one(sc, f"SELECT COUNT(DISTINCT LOWER(name)) AS n FROM {T('custom_field')}"),
+          one(dc, f"SELECT COUNT(*) FROM {D('custom_field')}"), False)
+    check('relationships', one(sc, f"SELECT COUNT(*) AS n FROM {T('bug_relationship')}"), one(dc, f"SELECT COUNT(*) FROM {D('bug_relationship')}"), False)
+    att_src = one(sc, f"SELECT COUNT(*) AS n FROM {T('bug_file')} f JOIN {known} ON b.id = f.bug_id")
+    check('attachments' + (' (minus those without content)' if written else ''),
+          att_src - attachments_missing if written else att_src, one(dc, f"SELECT COUNT(*) FROM {D('bug_file')}"), strict=bool(written))
+
+    if written:                                    # everything the importer wrote is really in the target
+        for t, n in written.items():
+            check(f'rows written to {t}', n, one(dc, f"SELECT COUNT(*) FROM {D(t)}"))
+
+    def digest(rows):
+        h = hashlib.sha256(); n = 0
+        for line in rows:
+            h.update(line.encode('utf-8', 'replace')); h.update(b'\n'); n += 1
+        return f'{n}:{h.hexdigest()[:16]}'
+
+    def src_issue_lines():
+        sql = (f"SELECT b.id, b.project_id, b.status, b.resolution, b.priority, b.severity, b.reproducibility, b.view_state, b.sticky, "
+               f"b.date_submitted, b.last_updated, b.summary, t.description, t.steps_to_reproduce, t.additional_information "
+               f"FROM {known} LEFT JOIN {T('bug_text')} t ON t.id = b.bug_text_id ORDER BY b.id")
+        for r in stream(src, sql, a.src_type, 'src_issues'):
+            yield '|'.join(map(str, [r['id'], r['project_id'], i(r['status']), i(r['resolution']), i(r['priority']), i(r['severity']),
+                                     i(r['reproducibility']), i(r['view_state']), 1 if b(r['sticky']) else 0, i(r['date_submitted']),
+                                     i(r['last_updated']), s(r['summary'], 128) or '(no summary)', s(r['description']),
+                                     s(r['steps_to_reproduce']), s(r['additional_information'])]))
+
+    def dst_issue_lines():
+        sql = ("SELECT id, project_id, status, resolution, priority, severity, reproducibility, view_state, sticky, "
+               "EXTRACT(EPOCH FROM date_submitted)::bigint, EXTRACT(EPOCH FROM last_updated)::bigint, summary, description, "
+               f"steps_to_reproduce, additional_information FROM {D('bug')} ORDER BY id")
+        cur = dst.cursor(name='dst_issues'); cur.itersize = 2000; cur.execute(sql)
+        for r in cur:
+            yield '|'.join(map(str, [r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], 1 if r[8] else 0, r[9], r[10], r[11], r[12], r[13], r[14]]))
+        cur.close()
+
+    def src_note_lines():
+        sql = (f"SELECT n.id, n.bug_id, n.view_state, n.date_submitted, n.time_tracking, x.note FROM {notes_src} "
+               f"LEFT JOIN {T('bugnote_text')} x ON x.id = n.bugnote_text_id ORDER BY n.id")
+        for r in stream(src, sql, a.src_type, 'src_notes'):
+            yield '|'.join(map(str, [r['id'], r['bug_id'], i(r['view_state']), i(r['date_submitted']), i(r['time_tracking']), s(r['note'])]))
+
+    def dst_note_lines():
+        cur = dst.cursor(name='dst_notes'); cur.itersize = 2000
+        cur.execute(f"SELECT id, bug_id, view_state, EXTRACT(EPOCH FROM date_submitted)::bigint, time_tracking, text FROM {D('bugnote')} ORDER BY id")
+        for r in cur:
+            yield '|'.join(map(str, list(r)))
+        cur.close()
+
+    check('content digest of every issue (texts, dates, status ...)', digest(src_issue_lines()), digest(dst_issue_lines()))
+    check('content digest of every note', digest(src_note_lines()), digest(dst_note_lines()))
+    print('\nRECONCILIATION: ' + ('PASS - the target matches the source.' if not fails else f'FAIL - {fails} check(s) differ, see above.'))
+    src.rollback(); dst.rollback()
+    return fails
+
+
 def main():
     a = parse()
     import psycopg2, psycopg2.extras
-    if a.src_type == 'mysql':
-        import pymysql, pymysql.cursors
-        src = pymysql.connect(host=a.src_host, port=a.src_port or 3306, user=a.src_user, password=a.src_password,
-                              database=a.src_db, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
-    else:
-        src = psycopg2.connect(host=a.src_host, port=a.src_port or 5432, user=a.src_user, password=a.src_password,
-                               dbname=a.src_db, cursor_factory=psycopg2.extras.RealDictCursor)
+    if a.verify_only:
+        sys.exit(2 if reconcile(a) else 0)
+    src = connect_source(a)
     sc = src.cursor()
 
     def T(name): return f'{a.src_prefix}_{name}_table'
@@ -139,41 +281,59 @@ def main():
                 if r['project_id'] in project_ids]
     tags = rows('tag', 'id,user_id,name,description,date_created')
 
-    # ---- issues (+ merged text)
-    texts = {t['id']: t for t in rows('bug_text', 'id,description,steps_to_reproduce,additional_information')}
-    bugs = rows('bug', 'id,project_id,reporter_id,handler_id,duplicate_id,priority,severity,reproducibility,status,'
-                       'resolution,projection,eta,bug_text_id,os,os_build,platform,version,fixed_in_version,'
-                       'target_version,build,view_state,summary,sticky,category_id,date_submitted,last_updated')
-    issues = []; bug_ids = set(); bug_status = Counter()
-    for r in bugs:
+    # ---- issues (+ merged text). Two passes so that even huge databases need little memory:
+    #   pass 1 (light): which issues are importable, status counts, global categories that must be copied into projects
+    #   pass 2 (while writing): the full rows incl. text are streamed straight into the target
+    def row_stream(sql, name):
+        conn = connect_source(a)
+        try:
+            yield from stream(conn, sql, a.src_type, name)
+        finally:
+            conn.close()
+
+    bug_ids = set(); bug_status = Counter(); n_issues = 0
+    for r in row_stream(f"SELECT id, project_id, reporter_id, status, category_id FROM {T('bug')}", 'issues_pass1'):
         if r['project_id'] not in project_ids:
             W('issue skipped (unknown project)', f"bug {r['id']}"); continue
-        rep = r['reporter_id'] if r['reporter_id'] in user_ids else admin_id
-        if rep != r['reporter_id']: W('reporter missing -> admin', f"bug {r['id']}")
-        t = texts.get(r['bug_text_id'], {})
-        bug_ids.add(r['id']); bug_status[i(r['status'])] += 1
-        issues.append((r['id'], r['project_id'], rep, uid(r['handler_id']) if i(r['handler_id']) else None,
-            r['duplicate_id'] if i(r['duplicate_id']) else None, i(r['priority'], 30), i(r['severity'], 50),
-            i(r['reproducibility'], 10), i(r['status'], 10), i(r['resolution'], 10), i(r['projection'], 10), i(r['eta'], 10),
-            cat_for(r['project_id'], r['category_id']), ts(r['date_submitted'], EPOCH), ts(r['last_updated'], EPOCH),
-            s(r['os'], 32), s(r['os_build'], 32), s(r['platform'], 32), s(r['version'], 64), s(r['fixed_in_version'], 64),
-            s(r['target_version'], 64), s(r['build'], 32), i(r['view_state'], 10), s(r['summary'], 128) or '(no summary)',
-            b(r['sticky']), s(t.get('description')), s(t.get('steps_to_reproduce')), s(t.get('additional_information'))))
-    issues = [x for x in issues]
-    dup_fix = [x for x in issues if x[4] and x[4] not in bug_ids]    # duplicate_id is not a FK, only a number: keep it
+        if r['reporter_id'] not in user_ids: W('reporter missing -> admin', f"bug {r['id']}")
+        bug_ids.add(r['id']); bug_status[i(r['status'])] += 1; n_issues += 1
+        cat_for(r['project_id'], r['category_id'])                     # registers the project's copy of a global category
+
+    def issue_rows():
+        sql = (f"SELECT b.id, b.project_id, b.reporter_id, b.handler_id, b.duplicate_id, b.priority, b.severity, b.reproducibility, "
+               f"b.status, b.resolution, b.projection, b.eta, b.os, b.os_build, b.platform, b.version, b.fixed_in_version, "
+               f"b.target_version, b.build, b.view_state, b.summary, b.sticky, b.category_id, b.date_submitted, b.last_updated, "
+               f"t.description, t.steps_to_reproduce, t.additional_information "
+               f"FROM {T('bug')} b LEFT JOIN {T('bug_text')} t ON t.id = b.bug_text_id ORDER BY b.id")
+        for r in row_stream(sql, 'issues_pass2'):
+            if r['project_id'] not in project_ids: continue
+            rep = r['reporter_id'] if r['reporter_id'] in user_ids else admin_id
+            yield (r['id'], r['project_id'], rep, uid(r['handler_id']) if i(r['handler_id']) else None,
+                r['duplicate_id'] if i(r['duplicate_id']) else None, i(r['priority'], 30), i(r['severity'], 50),
+                i(r['reproducibility'], 10), i(r['status'], 10), i(r['resolution'], 10), i(r['projection'], 10), i(r['eta'], 10),
+                cat_for(r['project_id'], r['category_id']), ts(r['date_submitted'], EPOCH), ts(r['last_updated'], EPOCH),
+                s(r['os'], 32), s(r['os_build'], 32), s(r['platform'], 32), s(r['version'], 64), s(r['fixed_in_version'], 64),
+                s(r['target_version'], 64), s(r['build'], 32), i(r['view_state'], 10), s(r['summary'], 128) or '(no summary)',
+                b(r['sticky']), s(r['description']), s(r['steps_to_reproduce']), s(r['additional_information']))
 
     bug_tags = {(r['bug_id'], r['tag_id']) for r in rows('bug_tag', 'bug_id,tag_id')}
     tag_ids = {t['id'] for t in tags}
     bug_tags = [x for x in bug_tags if x[0] in bug_ids and x[1] in tag_ids]
 
-    # ---- notes
-    ntext = {t['id']: t['note'] for t in rows('bugnote_text', 'id,note')}
-    notes_out = []
-    for r in rows('bugnote', 'id,bug_id,reporter_id,bugnote_text_id,view_state,date_submitted,last_modified,note_type,time_tracking'):
-        if r['bug_id'] not in bug_ids: W('note skipped (unknown issue)'); continue
-        rep = r['reporter_id'] if r['reporter_id'] in user_ids else admin_id
-        notes_out.append((r['id'], r['bug_id'], rep, s(ntext.get(r['bugnote_text_id'])), i(r['view_state'], 10),
-                          ts(r['date_submitted'], EPOCH), ts(r['last_modified'], EPOCH), i(r['note_type']), max(i(r['time_tracking']), 0)))
+    # ---- notes (text joined in SQL, streamed while writing)
+    known_bugs = f"{T('bug')} b JOIN {T('project')} p ON p.id = b.project_id"
+    n_notes = scalar_count(sc, f"SELECT COUNT(*) AS n FROM {T('bugnote')} n JOIN {known_bugs} ON b.id = n.bug_id")
+    skipped_notes = scalar_count(sc, f"SELECT COUNT(*) AS n FROM {T('bugnote')}") - n_notes
+    if skipped_notes: warn['note skipped (unknown issue)'] += skipped_notes
+
+    def note_rows():
+        sql = (f"SELECT n.id, n.bug_id, n.reporter_id, n.view_state, n.date_submitted, n.last_modified, n.note_type, n.time_tracking, x.note "
+               f"FROM {T('bugnote')} n LEFT JOIN {T('bugnote_text')} x ON x.id = n.bugnote_text_id ORDER BY n.id")
+        for r in row_stream(sql, 'notes'):
+            if r['bug_id'] not in bug_ids: continue
+            rep = r['reporter_id'] if r['reporter_id'] in user_ids else admin_id
+            yield (r['id'], r['bug_id'], rep, s(r['note']), i(r['view_state'], 10), ts(r['date_submitted'], EPOCH),
+                   ts(r['last_modified'], EPOCH), i(r['note_type']), max(i(r['time_tracking']), 0))
 
     monitors = {(r['user_id'], r['bug_id']) for r in rows('bug_monitor', 'user_id,bug_id')}
     monitors = [m for m in monitors if m[0] in user_ids and m[1] in bug_ids]
@@ -187,11 +347,14 @@ def main():
         elif t == 4: a_, b_, t = b_, a_, 0
         rels.append((r['id'], a_, b_, t))
 
-    hist = []
-    for r in rows('bug_history', 'id,user_id,bug_id,field_name,old_value,new_value,type,date_modified'):
-        if r['bug_id'] not in bug_ids: continue
-        hist.append((r['id'], r['bug_id'], uid(r['user_id']), s(r['field_name'], 64), s(r['old_value']) or None,
-                     s(r['new_value']) or None, i(r['type']), ts(r['date_modified'], EPOCH)))
+    n_hist = scalar_count(sc, f"SELECT COUNT(*) AS n FROM {T('bug_history')} h JOIN {known_bugs} ON b.id = h.bug_id")
+
+    def hist_rows():
+        sql = (f"SELECT id, user_id, bug_id, field_name, old_value, new_value, type, date_modified FROM {T('bug_history')} ORDER BY id")
+        for r in row_stream(sql, 'history'):
+            if r['bug_id'] not in bug_ids: continue
+            yield (r['id'], r['bug_id'], uid(r['user_id']), s(r['field_name'], 64), s(r['old_value']) or None,
+                   s(r['new_value']) or None, i(r['type']), ts(r['date_modified'], EPOCH))
 
     # ---- custom fields (definitions, project links, values)
     cfields = rows('custom_field', 'id,name,type,possible_values,default_value,valid_regexp,access_level_r,access_level_rw,'
@@ -225,8 +388,8 @@ def main():
     print('\n=== SOURCE REPORT ===')
     for k, v in [('users', len(users)), ('projects', len(projects)), ('sub-projects', len(parent_of)), ('project members', len(pu)),
                  ('categories (after copying global ones)', len(cat_rows)), ('versions', len(versions)), ('tags', len(tags)),
-                 ('issues', len(issues)), ('issue-tag links', len(bug_tags)), ('notes', len(notes_out)),
-                 ('monitors', len(monitors)), ('relationships', len(rels)), ('history rows', len(hist)),
+                 ('issues', n_issues), ('issue-tag links', len(bug_tags)), ('notes', n_notes),
+                 ('monitors', len(monitors)), ('relationships', len(rels)), ('history rows', n_hist),
                  ('attachments', len(file_meta)), ('news', len(news)), ('custom fields', len(cfields)),
                  ('custom field links', len(cf_links)), ('custom field values', len(cf_values))]:
         print(f'  {k:42s} {v}')
@@ -252,10 +415,24 @@ def main():
     if a.wipe:
         dc.execute('TRUNCATE ' + ', '.join(full(t) for t in tables) + ' RESTART IDENTITY CASCADE')
 
+    written = {}
+
     def ins(table, cols, data):
         if data:
             psycopg2.extras.execute_values(dc, f'INSERT INTO {full(table)} ({cols}) VALUES %s', data, page_size=500)
+        written[table] = len(data)
         print(f'  wrote {len(data):7d}  {table}')
+
+    def ins_stream(table, cols, rows_iter, chunk=2000):
+        n = 0; batch = []
+        for row in rows_iter:
+            batch.append(row)
+            if len(batch) >= chunk:
+                psycopg2.extras.execute_values(dc, f'INSERT INTO {full(table)} ({cols}) VALUES %s', batch, page_size=chunk); n += len(batch); batch = []
+        if batch:
+            psycopg2.extras.execute_values(dc, f'INSERT INTO {full(table)} ({cols}) VALUES %s', batch, page_size=chunk); n += len(batch)
+        written[table] = n
+        print(f'  wrote {n:7d}  {table}')
 
     print('\nWriting target ...')
     ins('user', 'id,username,realname,email,password,enabled,protected,access_level,login_count,last_visit,date_created',
@@ -290,18 +467,18 @@ def main():
         if n.lower() in seen: W('duplicate tag name skipped', n); continue
         seen.add(n.lower()); trows.append((t['id'], n, s(t['description']), uid(t['user_id']), ts(t['date_created'], EPOCH)))
     ins('tag', 'id,name,description,user_id,date_created', trows)
-    ins('bug', 'id,project_id,reporter_id,handler_id,duplicate_id,priority,severity,reproducibility,status,resolution,projection,eta,'
+    ins_stream('bug', 'id,project_id,reporter_id,handler_id,duplicate_id,priority,severity,reproducibility,status,resolution,projection,eta,'
                'category_id,date_submitted,last_updated,os,os_build,platform,version,fixed_in_version,target_version,build,view_state,'
-               'summary,sticky,description,steps_to_reproduce,additional_information', issues)
+               'summary,sticky,description,steps_to_reproduce,additional_information', issue_rows())
     ins('custom_field_project', 'field_id,project_id,sequence',
         [(r['field_id'], r['project_id'], i(r['sequence'])) for r in cf_links if r['field_id'] in kept_cf])
     ins('custom_field_string', 'field_id,bug_id,value', [v for v in cf_values if v[0] in kept_cf])
     kept_tags = {t[0] for t in trows}
     ins('bug_tag', 'bug_id,tag_id', [x for x in bug_tags if x[1] in kept_tags])
-    ins('bugnote', 'id,bug_id,reporter_id,text,view_state,date_submitted,last_modified,note_type,time_tracking', notes_out)
+    ins_stream('bugnote', 'id,bug_id,reporter_id,text,view_state,date_submitted,last_modified,note_type,time_tracking', note_rows())
     ins('bug_monitor', 'user_id,bug_id', monitors)
     ins('bug_relationship', 'id,source_bug_id,destination_bug_id,relationship_type', rels)
-    ins('bug_history', 'id,bug_id,user_id,field_name,old_value,new_value,type,date_modified', hist)
+    ins_stream('bug_history', 'id,bug_id,user_id,field_name,old_value,new_value,type,date_modified', hist_rows())
     ins('news', 'id,project_id,poster_id,date_posted,last_modified,view_state,announcement,headline,body', news)
 
     # attachments: fetched one by one (can be large)
@@ -322,21 +499,24 @@ def main():
                    (m['id'], m['bug_id'], uid(m['user_id']), s(m['title'], 250), s(m['description']), s(m['filename'], 250)[:250],
                     len(content), s(m['file_type'], 250), ts(m['date_added'], EPOCH), psycopg2.Binary(content)))
         nfiles += 1
+    written['bug_file'] = nfiles
     print(f'  wrote {nfiles:7d}  bug_file   ({missing} skipped - no content; use --files-dir if Mantis stored files on disk)')
 
     # advance the id sequences so new records do not collide with imported ids
     for t in tables:
         if t in ('bug_tag',): continue
-        dc.execute(f"SELECT setval(pg_get_serial_sequence('{full(t)}','id'), GREATEST((SELECT COALESCE(MAX(id),0) FROM {full(t)}),1))")
+        dc.execute(f"SELECT setval(pg_get_serial_sequence('{full(t)}','id'), COALESCE((SELECT MAX(id) FROM {full(t)}), 1), "
+                   f"(SELECT MAX(id) FROM {full(t)}) IS NOT NULL)")
     dst.commit()
 
     # ---------------------------------------------------------------- verify
-    print('\n=== VERIFICATION (target) ===')
-    dc.execute(f'SELECT status, count(*) FROM {full("bug")} GROUP BY status ORDER BY status')
-    got = dict(dc.fetchall())
-    print('  issues by status:', got)
-    print('  matches source  :', 'YES' if got == dict(bug_status) else 'NO - compare with the source report above')
-    print('\nDone. Start the backend and log in with an existing Mantis username + its old password.')
+    if warn:
+        print('\nNotes from the import (rows that were skipped or adjusted on purpose):')
+        for k, v in warn.items(): print(f'    {k}: {v}')
+    fails = 0 if a.no_verify else reconcile(a, written, missing)
+    print('\nDone. Start the backend and log in with an existing Mantis username + its old password.' if not fails else
+          '\nIMPORT FINISHED BUT THE RECONCILIATION FAILED - do not go live before the differences are explained.')
+    sys.exit(2 if fails else 0)
 
 if __name__ == '__main__':
     main()

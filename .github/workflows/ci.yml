@@ -48,6 +48,27 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  importer:
+    name: Importer tests (MantisBT data migration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install pgserver psycopg2-binary pymysql
+
+      # starts an embedded PostgreSQL, loads a nasty MantisBT fixture, runs tools/import_mantis.py and checks every table;
+      # the target schema is generated from the JPA entities, so a renamed column breaks this job.
+      # (The same suite against a MySQL source: tools/tests/test_importer_mysql.py, needs a local mysqld - see IMPORT.md)
+      - name: Importer end-to-end tests
+        working-directory: tools/tests
+        run: python -m unittest test_importer -v
+
   docker:
     name: Docker images
     runs-on: ubuntu-latest
