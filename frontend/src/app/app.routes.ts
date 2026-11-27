@@ -8,6 +8,9 @@ export const routes: Routes = [
     loadComponent: () => import('./layout.component').then(m => m.LayoutComponent),
     children: [
       { path: '', pathMatch: 'full', loadComponent: () => import('./pages/dashboard.component').then(m => m.DashboardComponent) },
+      { path: 'my-view', loadComponent: () => import('./pages/my-view.component').then(m => m.MyViewComponent) },
+      { path: 'roadmap', data: { kind: 'roadmap' }, loadComponent: () => import('./pages/release-notes.component').then(m => m.ReleaseNotesComponent) },
+      { path: 'changelog', data: { kind: 'changelog' }, loadComponent: () => import('./pages/release-notes.component').then(m => m.ReleaseNotesComponent) },
       { path: 'issues', loadComponent: () => import('./pages/issue-list.component').then(m => m.IssueListComponent) },
       { path: 'report', loadComponent: () => import('./pages/issue-form.component').then(m => m.IssueFormComponent) },
       { path: 'issues/:id', loadComponent: () => import('./pages/issue-view.component').then(m => m.IssueViewComponent) },

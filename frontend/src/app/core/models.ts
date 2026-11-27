@@ -65,6 +65,12 @@ export interface TimeReport { entries: TimeEntry[]; byUser: TimeUserTotal[]; tot
 export interface RowMessage { row: number; value: string; message: string; }
 export interface ImportResult { created: number; updated: number; skipped: number; removed: number; problems: RowMessage[]; }
 export interface CopyResult { categories: number; versions: number; members: number; customFields: number; problems: RowMessage[]; }
+export interface MyViewBox { key: string; title: string; total: number; items: IssueSummary[]; }
+export interface MyView { boxes: MyViewBox[]; }
+export interface ReleaseItem { id: number; summary: string; status: number; resolution: number; priority: number; handler: string; category: string; }
+export interface ReleaseBlock { projectId: number; projectName: string; versionId: number; version: string; description: string;
+  dateOrder: string | null; released: boolean; total: number; resolved: number; issues: ReleaseItem[]; }
+export interface ReleaseNotes { versions: ReleaseBlock[]; truncated: boolean; }
 export type Meta = Record<string, Record<string, string>>;
 
 export interface IssueQuery {

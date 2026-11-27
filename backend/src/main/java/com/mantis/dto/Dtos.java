@@ -130,6 +130,10 @@ public final class Dtos {
     public record TimeUserTotal(UserRef user, long minutes) {}
     public record TimeReport(List<TimeEntry> entries, List<TimeUserTotal> byUser, long totalMinutes) {}
 
+    /** one box of the "My View" page: the newest issues (max. 10) and the total number */
+    public record MyViewBox(String key, String title, long total, List<IssueSummary> items) {}
+    public record MyView(List<MyViewBox> boxes) {}
+
     public record PageResult<T>(List<T> items, long total, int page, int size) {}
     public record CountEntry(int key, String label, long count) {}
     public record SummaryView(long total, List<CountEntry> byStatus, List<CountEntry> byPriority,

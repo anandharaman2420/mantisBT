@@ -72,6 +72,9 @@ throttling, then bulk actions and move/clone.
       (1.1 GB -> 47 MB peak on 850k rows), reconciles source vs target (`--verify-only`, content digests, exit code 2),
       supports `--src-charset`, fixes the id sequence of tables that are empty in the source. 43 end-to-end tests
       (`tools/tests`, embedded PostgreSQL + real MySQL, schema generated from the JPA entities); CI job `importer`.
+- [x] My View, Roadmap and Changelog pages (classic Mantis pages, no schema change). The grouping rules are plain Java
+      (`ReleaseNotes`, 8 unit tests), the pages reuse the search visibility rules; `OverviewIntegrationTest` covers
+      private-issue visibility, progress, ordering, access.
 - [ ] Still open: refresh-token rotation and logout revocation (needs token storage or a per-user token version
       -> schema change, wait for the Flyway V2 migration), cluster-wide throttling (needs shared store).
 

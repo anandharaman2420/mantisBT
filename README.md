@@ -169,3 +169,16 @@ Full endpoint list, compatibility matrix, examples, Postman collection and limit
 reconciles source and target (counts, per-project / per-status figures and a content digest of every issue and note).
 It is covered by end-to-end tests against real PostgreSQL and MySQL servers and was run against 50 000 issues / 300 000 notes /
 500 000 history rows. See `tools/IMPORT.md`.
+
+
+## My View, Roadmap and Changelog
+
+* **My View** (`/my-view`, the Mantis landing page): boxes with the 10 newest issues and the total - assigned to me, reported by me,
+  resolved and waiting for my verification, monitored by me, unassigned (only for people who can assign), modified in the last
+  7 days. Follows the project selector.
+* **Roadmap**: unreleased, non-obsolete versions with the issues whose *target version* is that version, progress bar
+  (resolved / total), resolved issues struck through. Soonest version first.
+* **Changelog**: resolved / closed issues grouped by their *fixed-in version*, newest version first.
+* Versions are matched per project, ignoring case and blanks. Selecting a project includes its sub-projects. The pages use the
+  normal search rules, so private issues / projects never show up for people who may not see them.
+* `GET /api/my-view`, `/api/roadmap`, `/api/changelog` (all take an optional `projectId`).

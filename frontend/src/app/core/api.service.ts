@@ -118,6 +118,11 @@ export class ApiService {
     return this.http.get<M.TimeReport>(`${this.base}/time-tracking`, { params });
   }
 
+  // my view / roadmap / changelog
+  myView(projectId: number | null) { return this.http.get<M.MyView>(`${this.base}/my-view`, { params: projectId ? { projectId } : {} }); }
+  roadmap(projectId: number | null) { return this.http.get<M.ReleaseNotes>(`${this.base}/roadmap`, { params: projectId ? { projectId } : {} }); }
+  changelog(projectId: number | null) { return this.http.get<M.ReleaseNotes>(`${this.base}/changelog`, { params: projectId ? { projectId } : {} }); }
+
   // bulk / move / copy
   bulk(req: any) { return this.http.post<M.BulkResult>(`${this.base}/issues/bulk`, req); }
   moveIssue(id: number, projectId: number) { return this.http.post<M.IssueView>(`${this.base}/issues/${id}/move`, { projectId }); }

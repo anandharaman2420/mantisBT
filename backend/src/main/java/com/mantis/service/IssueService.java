@@ -91,6 +91,14 @@ public class IssueService {
         return issues.findAll(spec, pg);
     }
 
+    /** like search(), plus an extra criteria on top of the normal visibility rules (roadmap, changelog, My View ...) */
+    @Transactional(readOnly = true)
+    public Page<Issue> search(User me, Filter f, Specification<Issue> extra, Pageable pg) {
+        Specification<Issue> spec = buildSpecification(me, f);
+        if (spec == null) return Page.empty(pg);
+        return issues.findAll(spec.and(extra), pg);
+    }
+
     @Transactional(readOnly = true)
     public List<Issue> searchAll(User me, Filter f, org.springframework.data.domain.Sort sort) {
         Specification<Issue> spec = buildSpecification(me, f);
