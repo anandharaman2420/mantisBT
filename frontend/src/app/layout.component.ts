@@ -16,6 +16,7 @@ import { AuthService } from './core/auth.service';
         <a routerLink="/report" routerLinkActive="on">Report Issue</a>
         <a routerLink="/roadmap" routerLinkActive="on">Roadmap</a>
         <a routerLink="/changelog" routerLinkActive="on">Changelog</a>
+        <a routerLink="/summary" routerLinkActive="on">Summary</a>
         <a routerLink="/projects" routerLinkActive="on">Manage Projects</a>
         @if (auth.config().timeTracking && auth.isManager()) { <a routerLink="/time-report" routerLinkActive="on">Time Report</a> }
         @if (auth.isAdmin()) { <a routerLink="/users" routerLinkActive="on">Manage Users</a> }

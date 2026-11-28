@@ -71,6 +71,18 @@ export interface ReleaseItem { id: number; summary: string; status: number; reso
 export interface ReleaseBlock { projectId: number; projectName: string; versionId: number; version: string; description: string;
   dateOrder: string | null; released: boolean; total: number; resolved: number; issues: ReleaseItem[]; }
 export interface ReleaseNotes { versions: ReleaseBlock[]; truncated: boolean; }
+export interface SummaryCount { key: string; label: string; total: number; open: number; }
+export interface SummaryPerson { id: number | null; name: string; open: number; resolved: number; closed: number; total: number; }
+export interface SummaryDay { days: number; opened: number; resolved: number; }
+export interface SummaryAge { label: string; count: number; }
+export interface SummaryOldIssue { id: number; summary: string; status: number; handler: string; ageDays: number; }
+export interface SummaryActiveIssue { id: number; summary: string; status: number; notes: number; }
+export interface SummaryReport {
+  total: number; open: number; resolved: number; closed: number;
+  byStatus: SummaryCount[]; bySeverity: SummaryCount[]; byPriority: SummaryCount[]; byResolution: SummaryCount[];
+  byCategory: SummaryCount[]; byProject: SummaryCount[]; byHandler: SummaryPerson[]; byReporter: SummaryPerson[];
+  byDate: SummaryDay[]; openAge: SummaryAge[]; longestOpen: SummaryOldIssue[]; mostActive: SummaryActiveIssue[];
+}
 export type Meta = Record<string, Record<string, string>>;
 
 export interface IssueQuery {

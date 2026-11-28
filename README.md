@@ -182,3 +182,17 @@ It is covered by end-to-end tests against real PostgreSQL and MySQL servers and 
 * Versions are matched per project, ignoring case and blanks. Selecting a project includes its sub-projects. The pages use the
   normal search rules, so private issues / projects never show up for people who may not see them.
 * `GET /api/my-view`, `/api/roadmap`, `/api/changelog` (all take an optional `projectId`).
+
+
+## Summary report
+
+`/summary` (Mantis summary page, follows the project selector): totals; issues by status, severity, priority, resolution,
+category and (for all projects) project; by **developer** and by **reporter** (open / resolved / closed); **opened vs resolved**
+in the last 1, 2, 3, 7, 30, 60, 90, 180 and 365 days with the balance; **open issues by age**; the 10 **longest open** and the
+10 **most active** (most public notes) issues. `GET /api/reports/summary?projectId=`.
+
+* Everything is aggregated in the database (GROUP BY / COUNT), so it works for very large installations, and every query carries
+  the visibility rules of the normal search: private issues and projects are never counted for people who may not see them.
+* "Resolved" comes from the history (a change of the status to resolved / closed inside the period), the same way Mantis does it,
+  so imported history is used as well.
+* The small dashboard numbers stay at `GET /api/summary`.

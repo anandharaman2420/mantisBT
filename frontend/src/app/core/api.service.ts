@@ -118,6 +118,9 @@ export class ApiService {
     return this.http.get<M.TimeReport>(`${this.base}/time-tracking`, { params });
   }
 
+  // reports
+  summaryReport(projectId: number | null) { return this.http.get<M.SummaryReport>(`${this.base}/reports/summary`, { params: projectId ? { projectId } : {} }); }
+
   // my view / roadmap / changelog
   myView(projectId: number | null) { return this.http.get<M.MyView>(`${this.base}/my-view`, { params: projectId ? { projectId } : {} }); }
   roadmap(projectId: number | null) { return this.http.get<M.ReleaseNotes>(`${this.base}/roadmap`, { params: projectId ? { projectId } : {} }); }

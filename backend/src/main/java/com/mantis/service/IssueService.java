@@ -91,6 +91,14 @@ public class IssueService {
         return issues.findAll(spec, pg);
     }
 
+    /**
+     * The visibility rules of the normal search (accessible projects, private issues, project scope incl. sub-projects) as a
+     * reusable criteria, for reports that aggregate in the database. null = the user can see nothing (or not that project).
+     */
+    public Specification<Issue> visibleIssues(User me, Long projectId) {
+        return buildSpecification(me, new Filter(projectId, null, null, null, null, null, null, null, false, null));
+    }
+
     /** like search(), plus an extra criteria on top of the normal visibility rules (roadmap, changelog, My View ...) */
     @Transactional(readOnly = true)
     public Page<Issue> search(User me, Filter f, Specification<Issue> extra, Pageable pg) {

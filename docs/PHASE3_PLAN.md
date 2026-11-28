@@ -75,6 +75,9 @@ throttling, then bulk actions and move/clone.
 - [x] My View, Roadmap and Changelog pages (classic Mantis pages, no schema change). The grouping rules are plain Java
       (`ReleaseNotes`, 8 unit tests), the pages reuse the search visibility rules; `OverviewIntegrationTest` covers
       private-issue visibility, progress, ordering, access.
+- [x] Summary report (`/summary`, `GET /api/reports/summary`): database-side aggregates with the search visibility rules.
+      Date windows / age buckets are plain Java (`SummaryReport`, 7 unit tests incl. a property test that the SQL range test and
+      the bucket function agree over 800 days); `SummaryIntegrationTest` has hand-computed numbers (cross-checked on PostgreSQL).
 - [ ] Still open: refresh-token rotation and logout revocation (needs token storage or a per-user token version
       -> schema change, wait for the Flyway V2 migration), cluster-wide throttling (needs shared store).
 
